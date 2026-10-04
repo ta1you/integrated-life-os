@@ -1,0 +1,999 @@
+<!doctype html>
+<html lang="ja">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#f5f7f5" />
+    <title>統合版 Life OS | UI試作</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Noto+Sans+JP:wght@400;500;600;700&display=swap" rel="stylesheet" />
+    <style>
+      :root {
+        color-scheme: light;
+        --canvas: #f3f7fb;
+        --surface: #ffffff;
+        --surface-soft: #f7faff;
+        --ink: #1d2b40;
+        --muted: #718198;
+        --line: #dce6f1;
+        --green: #2868c7;
+        --green-dark: #2057a9;
+        --green-soft: #eaf2ff;
+        --blue: #3474ce;
+        --blue-soft: #edf4ff;
+        --amber: #ad6c2d;
+        --amber-soft: #fbf1e6;
+        --rose: #b65e58;
+        --rose-soft: #fbefed;
+        --shadow: 0 8px 24px rgba(39, 76, 126, 0.055);
+        --radius: 8px;
+      }
+
+      * { box-sizing: border-box; }
+
+      body {
+        margin: 0;
+        background: var(--canvas);
+        color: var(--ink);
+        font-family: "DM Sans", "Noto Sans JP", "Yu Gothic", sans-serif;
+        font-size: 14px;
+        line-height: 1.6;
+        -webkit-font-smoothing: antialiased;
+      }
+
+      button, textarea { font: inherit; }
+      button, a { -webkit-tap-highlight-color: transparent; }
+      button:focus-visible, a:focus-visible, textarea:focus-visible {
+        outline: 3px solid rgba(40, 104, 199, 0.28);
+        outline-offset: 2px;
+      }
+
+      .app-shell { min-height: 100vh; }
+
+      .sidebar {
+        position: fixed;
+        inset: 0 auto 0 0;
+        z-index: 5;
+        display: flex;
+        width: 228px;
+        flex-direction: column;
+        padding: 25px 16px 18px;
+        border-right: 1px solid var(--line);
+        background: #fbfdff;
+      }
+
+      .brand {
+        display: flex;
+        align-items: center;
+        gap: 11px;
+        padding: 0 8px 29px;
+        color: inherit;
+        text-decoration: none;
+      }
+
+      .brand-mark {
+        display: grid;
+        width: 38px;
+        height: 38px;
+        flex: 0 0 auto;
+        place-items: center;
+        border-radius: 11px;
+        background: var(--green);
+        color: white;
+        font-size: 17px;
+        font-weight: 700;
+      }
+
+      .brand-name { font-size: 15px; font-weight: 700; line-height: 1.2; }
+      .brand-caption { margin-top: 3px; color: var(--muted); font-size: 10px; }
+
+      .nav-label {
+        margin: 0 10px 8px;
+        color: #9aa59f;
+        font-size: 10px;
+        font-weight: 700;
+        letter-spacing: 0.08em;
+      }
+
+      .nav-list { display: grid; gap: 5px; }
+
+      .nav-item {
+        display: flex;
+        min-height: 42px;
+        align-items: center;
+        gap: 11px;
+        padding: 0 11px;
+        border: 0;
+        border-radius: 7px;
+        background: transparent;
+        color: #66736d;
+        cursor: pointer;
+        text-align: left;
+        transition: background 150ms ease, color 150ms ease;
+      }
+
+      .nav-item:hover { background: #f0f5fc; color: var(--ink); }
+      .nav-item[aria-current="page"] { background: var(--green-soft); color: var(--green-dark); font-weight: 700; }
+      .nav-item:disabled { opacity: 0.48; cursor: not-allowed; }
+      .nav-icon { display: grid; width: 21px; place-items: center; font-size: 16px; }
+
+      .sidebar-bottom {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        margin-top: auto;
+        padding: 14px 8px 0;
+        border-top: 1px solid var(--line);
+      }
+
+      .avatar {
+        display: grid;
+        width: 34px;
+        height: 34px;
+        place-items: center;
+        border-radius: 50%;
+        background: #dceaff;
+        color: var(--green-dark);
+        font-size: 12px;
+        font-weight: 700;
+      }
+
+      .account-name { font-size: 12px; font-weight: 600; }
+      .account-caption { color: var(--muted); font-size: 10px; }
+
+      .main-area { min-height: 100vh; margin-left: 228px; }
+
+      .topbar {
+        display: flex;
+        height: 66px;
+        align-items: center;
+        justify-content: space-between;
+        padding: 0 38px;
+        border-bottom: 1px solid var(--line);
+        background: rgba(255, 255, 255, 0.82);
+      }
+
+      .topbar-context { color: var(--muted); font-size: 12px; }
+      .topbar-date { color: #59675f; font-size: 12px; font-weight: 600; }
+      .page-wrap { width: min(1280px, 100%); margin: 0 auto; padding: 28px 30px 54px; }
+
+      .page-heading {
+        display: flex;
+        align-items: flex-end;
+        justify-content: space-between;
+        gap: 18px;
+        margin-bottom: 23px;
+      }
+
+      .eyebrow { margin: 0 0 7px; color: var(--green); font-size: 11px; font-weight: 700; }
+      h1, h2, h3, p { margin-top: 0; }
+      h1 { margin-bottom: 5px; font-size: 28px; font-weight: 700; line-height: 1.35; }
+      .heading-subtitle { margin-bottom: 0; color: var(--muted); font-size: 13px; }
+
+      .button {
+        display: inline-flex;
+        min-height: 38px;
+        align-items: center;
+        justify-content: center;
+        gap: 7px;
+        padding: 0 13px;
+        border: 1px solid var(--line);
+        border-radius: 6px;
+        background: var(--surface);
+        color: var(--ink);
+        cursor: pointer;
+        font-size: 12px;
+        font-weight: 600;
+        text-decoration: none;
+        transition: border-color 150ms ease, background 150ms ease, transform 150ms ease;
+      }
+
+      .button:hover { border-color: #b8c9bf; background: #fbfdfb; }
+      .button:active { transform: translateY(1px); }
+      .button-primary { border-color: var(--green); background: var(--green); color: white; }
+      .button-primary:hover { border-color: var(--green-dark); background: var(--green-dark); color: white; }
+      .button-small { min-height: 32px; padding: 0 10px; font-size: 11px; }
+
+      .card {
+        border: 1px solid var(--line);
+        border-radius: var(--radius);
+        background: var(--surface);
+        box-shadow: var(--shadow);
+      }
+
+      .next-card { padding: 18px; }
+      .section-kicker { margin-bottom: 10px; color: var(--muted); font-size: 11px; font-weight: 700; }
+      .next-time { margin-bottom: 3px; color: var(--green); font-size: 11px; font-weight: 700; }
+      .next-title { margin-bottom: 3px; font-size: 15px; font-weight: 700; }
+      .next-meta { margin-bottom: 0; color: var(--muted); font-size: 11px; }
+      .home-grid { display: grid; grid-template-columns: minmax(0, 1.3fr) minmax(215px, 0.8fr) minmax(230px, 0.9fr); gap: 14px; align-items: start; }
+      .home-stack { display: grid; gap: 14px; }
+      .note-prompt { padding: 16px; border-color: #d8e6fa; background: #f7faff; }
+      .note-prompt-title { margin-bottom: 5px; color: #2f67ad; font-size: 12px; font-weight: 700; }
+      .note-prompt-copy { margin-bottom: 12px; color: #60748e; font-size: 11px; }
+      .note-prompt .button { width: 100%; }
+      .daily-message { padding: 15px 16px; border: 1px solid #e7edf6; border-radius: var(--radius); background: #f8faff; }
+      .daily-message-title { margin-bottom: 3px; color: #3a5d90; font-size: 11px; font-weight: 700; }
+      .daily-message p { margin: 0; color: var(--muted); font-size: 10px; }
+      .schedule-footer { display: flex; justify-content: flex-end; margin-top: 12px; padding-top: 11px; border-top: 1px solid #edf0ed; }
+      #today-schedule { transition: border-color 180ms ease, box-shadow 180ms ease; }
+      #today-schedule.is-focused { border-color: #7ea7df; box-shadow: 0 0 0 3px rgba(52, 116, 206, 0.12), var(--shadow); }
+      .panel { padding: 19px; }
+      .panel-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 13px; }
+      .panel-title { margin: 0; font-size: 15px; font-weight: 700; }
+      .panel-note { color: var(--muted); font-size: 11px; }
+      .count-pill { padding: 3px 8px; border-radius: 999px; background: #eef4fc; color: #5d7290; font-size: 10px; font-weight: 700; }
+
+      .schedule-list { display: grid; }
+      .schedule-row {
+        display: grid;
+        grid-template-columns: 58px 3px minmax(0, 1fr) auto;
+        gap: 12px;
+        align-items: center;
+        min-height: 78px;
+        border-top: 1px solid #edf0ed;
+      }
+
+      .schedule-row:first-child { border-top: 0; }
+      .schedule-time { color: #526159; font-size: 12px; font-weight: 700; }
+      .schedule-marker { width: 3px; height: 38px; border-radius: 2px; background: var(--blue); }
+      .schedule-marker-group { background: #639686; }
+      .schedule-marker-work { background: #d08b43; }
+      .event-title { margin-bottom: 3px; font-size: 13px; font-weight: 700; }
+      .event-detail { margin: 0; color: var(--muted); font-size: 11px; }
+      .event-action { white-space: nowrap; }
+      .event-label { padding: 4px 8px; border-radius: 5px; background: #f2f5f3; color: #69766f; font-size: 10px; white-space: nowrap; }
+
+      .link-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+      .link-tile {
+        display: flex;
+        min-height: 58px;
+        align-items: center;
+        gap: 9px;
+        padding: 8px;
+        border: 1px solid #edf0ed;
+        border-radius: 6px;
+        color: inherit;
+        text-decoration: none;
+        transition: background 150ms ease, border-color 150ms ease, transform 150ms ease;
+      }
+
+      .link-tile:hover { transform: translateY(-1px); border-color: #cfddd3; background: #fbfdfb; }
+      .link-mark { display: grid; width: 31px; height: 31px; flex: 0 0 auto; place-items: center; border-radius: 7px; background: var(--blue-soft); color: var(--blue); font-size: 11px; font-weight: 700; }
+      .link-mark-green { background: var(--green-soft); color: var(--green); }
+      .link-mark-amber { background: var(--amber-soft); color: var(--amber); }
+      .link-name { display: block; font-size: 11px; font-weight: 600; line-height: 1.3; }
+      .link-kind { display: block; margin-top: 2px; color: #8a958e; font-size: 9px; }
+      .link-disclaimer { margin: 11px 0 0; color: #859089; font-size: 10px; }
+
+      .notes-page[hidden], .home-page[hidden] { display: none; }
+      .breadcrumb { display: flex; align-items: center; gap: 8px; margin-bottom: 14px; color: var(--muted); font-size: 11px; }
+      .breadcrumb button { padding: 0; border: 0; background: none; color: var(--green); cursor: pointer; font: inherit; }
+      .subject-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 20px; margin-bottom: 20px; }
+      .subject-title { margin-bottom: 6px; font-size: 27px; }
+      .subject-subtitle { margin: 0; color: var(--muted); font-size: 12px; }
+      .subject-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+
+      .subject-meta { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0; margin-bottom: 18px; padding: 15px 18px; }
+      .meta-cell { padding: 0 15px; border-left: 1px solid var(--line); }
+      .meta-cell:first-child { padding-left: 0; border-left: 0; }
+      .meta-label { display: block; margin-bottom: 4px; color: var(--muted); font-size: 10px; }
+      .meta-value { font-size: 12px; font-weight: 600; }
+      .class-badge { display: inline-flex; align-items: center; gap: 5px; padding: 3px 8px; border-radius: 5px; background: var(--blue-soft); color: var(--blue); font-size: 10px; font-weight: 700; }
+
+      .notes-layout { display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(245px, 0.7fr); gap: 18px; align-items: start; }
+      .notes-panel, .related-panel { padding: 20px; }
+      .segmented { display: inline-flex; gap: 3px; padding: 3px; border: 1px solid var(--line); border-radius: 7px; background: #f6f8f6; }
+      .segment-button { min-width: 63px; min-height: 31px; padding: 0 10px; border: 0; border-radius: 5px; background: transparent; color: #718078; cursor: pointer; font-size: 11px; font-weight: 600; }
+      .segment-button[aria-selected="true"] { background: var(--surface); color: var(--green-dark); box-shadow: 0 1px 4px rgba(30, 53, 42, 0.12); }
+      .lesson-panel { min-height: 195px; margin-top: 17px; padding: 18px; border-radius: 7px; background: var(--surface-soft); }
+      .lesson-panel[hidden] { display: none; }
+      .lesson-label { margin-bottom: 7px; color: var(--green); font-size: 10px; font-weight: 700; }
+      .lesson-heading { margin-bottom: 11px; font-size: 16px; }
+      .lesson-list { display: grid; gap: 8px; margin: 0; padding: 0; list-style: none; }
+      .lesson-list li { display: flex; gap: 9px; color: #526159; font-size: 12px; }
+      .lesson-list li::before { content: ""; width: 5px; height: 5px; flex: 0 0 auto; margin-top: 7px; border-radius: 50%; background: #76a18e; }
+
+      .free-note { margin-top: 18px; }
+      .free-note-heading { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 9px; }
+      .free-note textarea { display: block; width: 100%; min-height: 88px; resize: vertical; padding: 11px 12px; border: 1px solid var(--line); border-radius: 6px; background: white; color: var(--ink); font-size: 12px; }
+      .free-note textarea::placeholder { color: #9ba69f; }
+      .note-actions { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 8px; }
+      .save-status { min-height: 18px; color: var(--green); font-size: 10px; }
+      .storage-note { margin: 7px 0 0; color: #8b9690; font-size: 10px; }
+
+      .related-section + .related-section { margin-top: 21px; padding-top: 17px; border-top: 1px solid var(--line); }
+      .related-heading { margin-bottom: 11px; font-size: 12px; font-weight: 700; }
+      .related-item { padding: 11px 0; border-top: 1px solid #edf0ed; }
+      .related-item:first-of-type { padding-top: 0; border-top: 0; }
+      .related-title { margin-bottom: 4px; font-size: 11px; font-weight: 600; }
+      .related-meta { margin: 0; color: var(--muted); font-size: 10px; }
+      .related-link-list { display: grid; gap: 7px; }
+      .related-link { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 9px 10px; border: 1px solid var(--line); border-radius: 6px; color: var(--green-dark); font-size: 11px; font-weight: 600; text-decoration: none; }
+      .related-link:hover { background: var(--green-soft); }
+      .external-mark { color: #7f8d85; font-size: 12px; }
+      [data-page][hidden] { display: none !important; }
+      .page-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+      .toolbar { display: flex; align-items: center; gap: 8px; }
+      .toolbar-title { min-width: 125px; margin: 0; text-align: center; font-size: 15px; }
+      .icon-button { width: 34px; min-height: 34px; padding: 0; font-size: 15px; }
+      .calendar-layout { display: grid; grid-template-columns: minmax(0, 1.2fr) minmax(270px, 0.8fr); gap: 16px; align-items: start; }
+      .calendar-panel, .agenda-panel, .data-panel { padding: 18px; }
+      .calendar-weekdays, .calendar-days { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 4px; }
+      .calendar-weekday { padding: 5px 0; color: var(--muted); text-align: center; font-size: 10px; font-weight: 700; }
+      .calendar-day { position: relative; display: grid; min-height: 47px; place-items: center; border: 1px solid transparent; border-radius: 6px; background: transparent; color: var(--ink); cursor: pointer; font-size: 11px; }
+      .calendar-day:hover { background: #f2f6fc; }
+      .calendar-day.is-selected { border-color: var(--blue); background: var(--blue-soft); color: var(--blue); font-weight: 700; }
+      .calendar-day.has-events::after { position: absolute; bottom: 5px; width: 4px; height: 4px; border-radius: 50%; background: var(--green); content: ""; }
+      .calendar-day.is-muted { color: #b4bfcc; }
+      .agenda-list, .plain-list { display: grid; gap: 9px; }
+      .agenda-row { display: grid; grid-template-columns: 51px 3px minmax(0, 1fr) auto; gap: 10px; align-items: center; padding: 10px 0; border-top: 1px solid #edf0ed; }
+      .agenda-row:first-child { border-top: 0; }
+      .agenda-row .button { white-space: nowrap; }
+      .school-toolbar { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 12px; margin-bottom: 13px; }
+      .table-scroll { overflow-x: auto; }
+      .timetable { display: grid; min-width: 630px; grid-template-columns: 65px repeat(5, minmax(90px, 1fr)); border: 1px solid var(--line); border-radius: 7px; overflow: hidden; }
+      .timetable-cell { min-height: 67px; padding: 8px; border-right: 1px solid var(--line); border-bottom: 1px solid var(--line); background: white; }
+      .timetable-cell:nth-child(6n) { border-right: 0; }
+      .timetable-head { min-height: 34px; background: #f7faff; color: #657991; text-align: center; font-size: 10px; font-weight: 700; }
+      .period-cell { color: var(--muted); text-align: center; font-size: 10px; }
+      .class-chip { display: block; width: 100%; padding: 7px 6px; border: 1px solid #dce8f7; border-radius: 5px; background: #f0f6ff; color: #315f99; cursor: pointer; text-align: left; font-size: 10px; font-weight: 600; }
+      .class-chip small { display: block; margin-top: 3px; color: #70839c; font-size: 9px; font-weight: 400; }
+      .class-chip.zoom { border-color: #dfd8f4; background: #f6f2ff; color: #725ca3; }
+      .today-agenda { display: grid; gap: 8px; margin-top: 14px; }
+      .info-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 0; border-top: 1px solid #edf0ed; }
+      .info-row:first-child { border-top: 0; }
+      .subject-overview { display: grid; grid-template-columns: minmax(0, 1.3fr) minmax(250px, 0.7fr); gap: 16px; align-items: start; }
+      .course-description { color: #52647a; font-size: 13px; }
+      .detail-tabs { display: flex; gap: 5px; overflow-x: auto; margin: 15px 0; padding-bottom: 7px; border-bottom: 1px solid var(--line); }
+      .detail-tab { flex: 0 0 auto; padding: 7px 11px; border: 0; border-radius: 5px; background: transparent; color: var(--muted); cursor: pointer; font-size: 11px; }
+      .detail-tab.is-active { background: var(--blue-soft); color: var(--blue); font-weight: 700; }
+      .stat-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; margin-bottom: 15px; }
+      .stat-card { padding: 14px; border: 1px solid var(--line); border-radius: 7px; background: white; }
+      .stat-label { display: block; margin-bottom: 5px; color: var(--muted); font-size: 10px; }
+      .stat-value { font-size: 19px; font-weight: 700; }
+      .task-list { display: grid; gap: 8px; }
+      .task-item { display: flex; align-items: center; gap: 10px; padding: 12px; border: 1px solid var(--line); border-radius: 7px; background: white; }
+      .task-item input { width: 16px; height: 16px; accent-color: var(--blue); }
+      .task-item.is-complete .task-title { color: #929eab; text-decoration: line-through; }
+      .task-copy { min-width: 0; flex: 1; }
+      .task-title { margin: 0 0 2px; font-size: 12px; font-weight: 600; }
+      .task-meta { margin: 0; color: var(--muted); font-size: 10px; }
+      .due-label { color: var(--rose); font-size: 10px; white-space: nowrap; }
+      .filter-row { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 14px; }
+      .filter-button { min-height: 30px; padding: 0 11px; border: 1px solid var(--line); border-radius: 999px; background: white; color: #63728a; cursor: pointer; font-size: 10px; }
+      .filter-button[aria-pressed="true"] { border-color: #c7daf5; background: var(--blue-soft); color: var(--blue); font-weight: 700; }
+      .project-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+      .project-card { padding: 17px; }
+      .project-title { margin-bottom: 4px; font-size: 14px; font-weight: 700; }
+      .project-subtitle { margin-bottom: 13px; color: var(--muted); font-size: 10px; }
+      .progress-line { height: 7px; overflow: hidden; border-radius: 999px; background: #eaf0f6; }
+      .progress-fill { height: 100%; border-radius: inherit; background: #4a88d9; }
+      .project-bottom { display: flex; justify-content: space-between; gap: 10px; margin-top: 7px; color: var(--muted); font-size: 10px; }
+      .work-tabs { display: flex; gap: 6px; margin: 0 0 15px; border-bottom: 1px solid var(--line); }
+      .work-tab { padding: 9px 13px; border: 0; border-bottom: 2px solid transparent; background: transparent; color: var(--muted); cursor: pointer; font-size: 11px; }
+      .work-tab[aria-selected="true"] { border-bottom-color: var(--blue); color: var(--blue); font-weight: 700; }
+      [data-work-panel][hidden] { display: none; }
+      .task-item[hidden], .searchable-link[hidden], .project-card[hidden] { display: none !important; }
+      .shift-grid { display: grid; grid-template-columns: minmax(0, 1.2fr) minmax(240px, 0.8fr); gap: 15px; }
+      .shift-row { display: grid; grid-template-columns: 48px minmax(0, 1fr) auto; gap: 10px; align-items: center; padding: 11px 0; border-top: 1px solid #edf0ed; }
+      .shift-row:first-child { border-top: 0; }
+      .money { font-variant-numeric: tabular-nums; font-weight: 700; }
+      .money-positive { color: #278169; }
+      .money-negative { color: #ba5f61; }
+      .finance-summary { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 11px; margin-bottom: 16px; }
+      .finance-chart { display: flex; height: 185px; align-items: end; justify-content: space-around; gap: 14px; padding: 17px 12px 0; border-bottom: 1px solid var(--line); background: repeating-linear-gradient(to bottom, transparent 0, transparent 44px, #edf1f5 45px); }
+      .bar-group { display: flex; height: 100%; align-items: end; gap: 5px; }
+      .bar { width: 18px; min-height: 4px; border-radius: 4px 4px 0 0; background: #4b8bd7; }
+      .bar.expense { background: #e17c79; }
+      .bar-label { display: block; margin-top: 6px; color: var(--muted); text-align: center; font-size: 9px; }
+      .link-tools { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 14px; }
+      .search-input { width: min(330px, 100%); min-height: 38px; padding: 0 12px; border: 1px solid var(--line); border-radius: 6px; background: white; color: var(--ink); font: inherit; font-size: 12px; }
+      .link-category { margin: 18px 0 9px; color: var(--muted); font-size: 10px; font-weight: 700; }
+      .empty-state { padding: 22px; color: var(--muted); text-align: center; font-size: 12px; }
+      .lesson-history { margin-top: 18px; padding-top: 16px; border-top: 1px solid var(--line); }
+      .history-list { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 7px; }
+      .history-button { display: flex; min-height: 46px; align-items: center; justify-content: space-between; gap: 6px; padding: 8px 9px; border: 1px solid var(--line); border-radius: 6px; background: white; color: #57677a; cursor: pointer; text-align: left; font-size: 10px; }
+      .history-button:hover { border-color: #b8cce7; background: #f8fbff; }
+      .history-button strong { display: block; color: var(--ink); font-size: 10px; }
+      .history-button span { color: var(--muted); font-size: 9px; }
+      .history-entry { min-width: 0; padding: 8px 9px; border: 1px solid var(--line); border-radius: 6px; background: white; }
+      .history-date { display: block; margin-bottom: 3px; color: #647a98; font-size: 9px; }
+      .history-entry-title { display: block; overflow: hidden; color: var(--ink); font-size: 10px; font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
+
+      .view-transition { animation: arrive 190ms ease both; }
+      @keyframes arrive { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
+
+      @media (max-width: 980px) {
+        .sidebar { width: 205px; }
+        .main-area { margin-left: 205px; }
+        .topbar { padding: 0 25px; }
+        .page-wrap { padding-right: 25px; padding-left: 25px; }
+        .home-grid { grid-template-columns: minmax(0, 1.1fr) minmax(220px, 0.9fr); }
+        .home-grid > :last-child { grid-column: 1 / -1; }
+        .link-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+        .notes-layout, .subject-overview, .calendar-layout, .shift-grid { grid-template-columns: minmax(0, 1fr); }
+      }
+
+      @media (max-width: 700px) {
+        .sidebar { inset: auto 0 0; width: 100%; height: 68px; flex-direction: row; justify-content: center; padding: 7px 12px calc(7px + env(safe-area-inset-bottom)); border-top: 1px solid var(--line); border-right: 0; background: rgba(255, 255, 255, 0.97); }
+        .brand, .nav-label, .sidebar-bottom { display: none; }
+        .nav-list { display: flex; width: 100%; justify-content: flex-start; gap: 6px; overflow-x: auto; scrollbar-width: none; }
+        .nav-list::-webkit-scrollbar { display: none; }
+        .nav-item { min-width: 66px; min-height: 48px; flex: 0 0 66px; flex-direction: column; justify-content: center; gap: 0; padding: 3px 5px; font-size: 9px; }
+        .nav-icon { height: 20px; font-size: 15px; }
+        .main-area { margin-left: 0; padding-bottom: 80px; }
+        .topbar { height: 55px; padding: 0 18px; }
+        .topbar-context { font-weight: 700; }
+        .page-wrap { padding: 24px 17px 34px; }
+        .page-heading { align-items: flex-start; flex-direction: column; margin-bottom: 18px; }
+        h1 { font-size: 24px; }
+        .home-grid { grid-template-columns: minmax(0, 1fr); gap: 13px; }
+        .home-grid > :last-child { grid-column: auto; }
+        .home-stack { gap: 13px; }
+        .panel { padding: 16px; }
+        .schedule-row { grid-template-columns: 48px 3px minmax(0, 1fr); gap: 9px; min-height: 75px; }
+        .event-action, .event-label { grid-column: 3; justify-self: start; margin-top: -4px; }
+        .event-action { min-height: 29px; }
+        .link-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+        .subject-heading { flex-direction: column; gap: 13px; }
+        .subject-title { font-size: 23px; }
+        .subject-actions { width: 100%; }
+        .subject-actions .button { flex: 1; }
+        .subject-meta { grid-template-columns: minmax(0, 1fr); gap: 12px; padding: 15px; }
+        .meta-cell, .meta-cell:first-child { padding: 0; border: 0; }
+        .meta-cell + .meta-cell { padding-top: 11px; border-top: 1px solid var(--line); }
+        .notes-panel, .related-panel { padding: 16px; }
+        .notes-panel .panel-heading { align-items: flex-start; flex-direction: column; }
+        .segment-button { min-width: 57px; }
+        .history-list { grid-template-columns: minmax(0, 1fr); }
+        .project-grid, .finance-summary, .stat-grid { grid-template-columns: minmax(0, 1fr); }
+        .calendar-day { min-height: 39px; }
+        .calendar-panel, .agenda-panel, .data-panel { padding: 14px; }
+        .finance-chart { height: 150px; }
+      }
+
+      @media (prefers-reduced-motion: reduce) {
+        *, *::before, *::after { scroll-behavior: auto !important; animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; transition-duration: 0.01ms !important; }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="app-shell">
+      <aside class="sidebar" aria-label="メインナビゲーション">
+        <a class="brand" href="#home" data-view-link="home">
+          <span class="brand-mark" aria-hidden="true">L</span>
+          <span>
+            <span class="brand-name">Life OS</span>
+            <span class="brand-caption" style="display:block">統合版 UI 試作</span>
+          </span>
+        </a>
+        <p class="nav-label">WORKSPACE</p>
+        <nav class="nav-list">
+          <button class="nav-item" type="button" data-view="home" aria-current="page">
+            <span class="nav-icon" aria-hidden="true">⌂</span><span>ホーム</span>
+          </button>
+          <button class="nav-item" type="button" data-view="calendar">
+            <span class="nav-icon" aria-hidden="true">▦</span><span>カレンダー</span>
+          </button>
+          <button class="nav-item" type="button" data-view="school">
+            <span class="nav-icon" aria-hidden="true">▤</span><span>学校</span>
+          </button>
+          <button class="nav-item" type="button" data-view="notes">
+            <span class="nav-icon" aria-hidden="true">✎</span><span>授業メモ</span>
+          </button>
+          <button class="nav-item" type="button" data-view="tasks">
+            <span class="nav-icon" aria-hidden="true">☑</span><span>タスク</span>
+          </button>
+          <button class="nav-item" type="button" data-view="projects">
+            <span class="nav-icon" aria-hidden="true">◫</span><span>プロジェクト</span>
+          </button>
+          <button class="nav-item" type="button" data-view="work">
+            <span class="nav-icon" aria-hidden="true">◷</span><span>バイト</span>
+          </button>
+          <button class="nav-item" type="button" data-view="finance">
+            <span class="nav-icon" aria-hidden="true">￥</span><span>収支</span>
+          </button>
+          <button class="nav-item" type="button" data-view="links">
+            <span class="nav-icon" aria-hidden="true">↗</span><span>リンク</span>
+          </button>
+          <button class="nav-item" type="button" disabled title="今回の試作対象外">
+            <span class="nav-icon" aria-hidden="true">⚙</span><span>設定</span>
+          </button>
+        </nav>
+        <div class="sidebar-bottom">
+          <span class="avatar" aria-hidden="true">太</span>
+          <span><span class="account-name" style="display:block">太郎さん</span><span class="account-caption">学生</span></span>
+        </div>
+      </aside>
+
+      <main class="main-area">
+        <header class="topbar">
+          <span class="topbar-context" id="topbar-context">ホーム</span>
+          <span class="topbar-date">2026年10月4日（日）</span>
+        </header>
+
+        <section class="page-wrap home-page view-transition" id="home-view" data-page="home" aria-labelledby="home-title">
+          <div class="page-heading">
+            <div>
+              <p class="eyebrow">10月4日（日） ・ SUNDAY</p>
+              <h1 id="home-title">おはようございます、太郎さん</h1>
+              <p class="heading-subtitle">今日もいい一日になりますように。</p>
+            </div>
+            <span class="count-pill">今日の予定 3件</span>
+          </div>
+
+          <div class="home-grid">
+            <section class="card panel" id="today-schedule" aria-labelledby="schedule-heading" tabindex="-1">
+              <div class="panel-heading">
+                <h2 class="panel-title" id="schedule-heading">今日の予定</h2>
+                <span class="count-pill">3件</span>
+              </div>
+              <div class="schedule-list">
+                <article class="schedule-row">
+                  <time class="schedule-time" datetime="2026-10-04T09:10">09:10</time>
+                  <span class="schedule-marker" aria-hidden="true"></span>
+                  <div>
+                    <p class="event-title">Webアプリ開発</p>
+                    <p class="event-detail">🏫 対面 ・ 302教室</p>
+                  </div>
+                  <button class="button button-small event-action" type="button" data-open-notes>授業メモ <span aria-hidden="true">→</span></button>
+                </article>
+                <article class="schedule-row">
+                  <time class="schedule-time" datetime="2026-10-04T13:00">13:00</time>
+                  <span class="schedule-marker schedule-marker-group" aria-hidden="true"></span>
+                  <div>
+                    <p class="event-title">グループ開発</p>
+                    <p class="event-detail">💻 オンライン ・ Zoom</p>
+                  </div>
+                  <span class="event-label">ミーティング</span>
+                </article>
+                <article class="schedule-row">
+                  <time class="schedule-time" datetime="2026-10-04T18:00">18:00</time>
+                  <span class="schedule-marker schedule-marker-work" aria-hidden="true"></span>
+                  <div>
+                    <p class="event-title">バイト</p>
+                    <p class="event-detail">🏪 出勤</p>
+                  </div>
+                  <span class="event-label">シフト</span>
+                </article>
+              </div>
+              <div class="schedule-footer">
+                <button class="button button-small" type="button" data-view="calendar">今日の予定を見る <span aria-hidden="true">→</span></button>
+              </div>
+            </section>
+
+            <div class="home-stack">
+            <article class="card next-card" aria-label="次の予定">
+              <p class="section-kicker">次の予定</p>
+              <p class="next-time">09:10 - 10:40</p>
+              <h2 class="next-title">Webアプリ開発</h2>
+              <p class="next-meta">🏫 対面 ・ 302教室</p>
+              <button class="button button-small" type="button" data-view="subject">科目ページへ <span aria-hidden="true">→</span></button>
+            </article>
+            <section class="card note-prompt" aria-labelledby="note-prompt-title">
+              <p class="note-prompt-title" id="note-prompt-title">今日の授業メモを確認しよう</p>
+              <p class="note-prompt-copy">Webアプリ開発の授業メモに、前回の内容が追加されています。</p>
+              <button class="button button-small" type="button" data-open-notes>授業メモを見る <span aria-hidden="true">→</span></button>
+            </section>
+            </div>
+
+            <div class="home-stack">
+            <section class="card panel" aria-labelledby="links-heading">
+              <div class="panel-heading">
+                <h2 class="panel-title" id="links-heading">よく使うリンク</h2>
+                <span class="panel-note">外部サービス</span>
+              </div>
+              <div class="link-grid">
+                <a class="link-tile" href="https://zoom.us/" target="_blank" rel="noopener noreferrer" aria-label="Zoomを新しいタブで開く">
+                  <span class="link-mark">Z</span><span><span class="link-name">Zoom</span><span class="link-kind">会議</span></span>
+                </a>
+                <a class="link-tile" href="https://teams.microsoft.com/" target="_blank" rel="noopener noreferrer" aria-label="Teamsを新しいタブで開く">
+                  <span class="link-mark link-mark-green">T</span><span><span class="link-name">Teams</span><span class="link-kind">会議</span></span>
+                </a>
+                <a class="link-tile" href="https://classroom.google.com/" target="_blank" rel="noopener noreferrer" aria-label="Classroomを新しいタブで開く">
+                  <span class="link-mark link-mark-amber">C</span><span><span class="link-name">Classroom</span><span class="link-kind">授業</span></span>
+                </a>
+                <a class="link-tile" href="https://mail.google.com/" target="_blank" rel="noopener noreferrer" aria-label="Gmailを新しいタブで開く">
+                  <span class="link-mark">G</span><span><span class="link-name">Gmail</span><span class="link-kind">メール</span></span>
+                </a>
+                <a class="link-tile" href="https://github.com/" target="_blank" rel="noopener noreferrer" aria-label="GitHubを新しいタブで開く">
+                  <span class="link-mark link-mark-green">GH</span><span><span class="link-name">GitHub</span><span class="link-kind">開発</span></span>
+                </a>
+                <a class="link-tile" href="https://www.figma.com/" target="_blank" rel="noopener noreferrer" aria-label="Figmaを新しいタブで開く">
+                  <span class="link-mark link-mark-amber">F</span><span><span class="link-name">Figma</span><span class="link-kind">デザイン</span></span>
+                </a>
+                <a class="link-tile" href="https://example.com/" target="_blank" rel="noopener noreferrer" aria-label="デモ用の学校ポータルリンクを新しいタブで開く">
+                  <span class="link-mark">校</span><span><span class="link-name">学校ポータル</span><span class="link-kind">デモリンク</span></span>
+                </a>
+              </div>
+              <p class="link-disclaimer">学校ポータルのリンク先はデモ用です。</p>
+            </section>
+            <section class="daily-message" aria-label="メッセージ">
+              <p class="daily-message-title">一歩ずつ、やりたいことに近づこう。</p>
+              <p>今日の積み重ねが、未来をつくる。</p>
+            </section>
+            </div>
+          </div>
+        </section>
+
+        <section class="page-wrap notes-page" id="notes-view" data-page="notes" aria-labelledby="subject-title" hidden>
+          <nav class="breadcrumb" aria-label="パンくずリスト">
+            <button type="button" data-view="home">ホーム</button><span aria-hidden="true">/</span><span>授業</span><span aria-hidden="true">/</span><span>Webアプリ開発</span>
+          </nav>
+
+          <div class="subject-heading">
+            <div>
+              <p class="eyebrow">SUBJECT / 2026年度</p>
+              <h1 class="subject-title" id="subject-title">Webアプリ開発</h1>
+              <p class="subject-subtitle">授業の情報と、前回からの続き。</p>
+            </div>
+            <div class="subject-actions">
+              <a class="button button-primary" href="https://zoom.us/" target="_blank" rel="noopener noreferrer">Zoomを開く <span aria-hidden="true">↗</span></a>
+              <a class="button" href="https://classroom.google.com/" target="_blank" rel="noopener noreferrer">資料を見る <span aria-hidden="true">↗</span></a>
+            </div>
+          </div>
+
+          <section class="card subject-meta" aria-label="授業情報">
+            <div class="meta-cell">
+              <span class="meta-label">授業形式</span>
+              <span class="class-badge">🏫 対面</span>
+            </div>
+            <div class="meta-cell">
+              <span class="meta-label">時間・教室</span>
+              <span class="meta-value">月曜 09:10 - 10:40 ・ 302教室</span>
+            </div>
+            <div class="meta-cell">
+              <span class="meta-label">授業リンク</span>
+              <span class="meta-value">補講 Zoom ・ 講義資料</span>
+            </div>
+          </section>
+
+          <div class="notes-layout">
+            <section class="card notes-panel" aria-labelledby="lesson-notes-heading">
+              <div class="panel-heading">
+                <div>
+                  <p class="section-kicker" style="margin-bottom:3px">CLASS NOTES</p>
+                  <h2 class="panel-title" id="lesson-notes-heading">授業メモ</h2>
+                </div>
+                <div class="segmented" role="tablist" aria-label="授業メモの期間">
+                  <button class="segment-button" id="tab-previous" type="button" role="tab" aria-selected="false" aria-controls="panel-previous" data-note-tab="previous">前回</button>
+                  <button class="segment-button" id="tab-current" type="button" role="tab" aria-selected="true" aria-controls="panel-current" data-note-tab="current">今回</button>
+                  <button class="segment-button" id="tab-next" type="button" role="tab" aria-selected="false" aria-controls="panel-next" data-note-tab="next">次回</button>
+                </div>
+              </div>
+
+              <div class="lesson-panel" id="panel-previous" role="tabpanel" aria-labelledby="tab-previous" hidden>
+                <p class="lesson-label">前回 ・ 9月28日</p>
+                <h3 class="lesson-heading">認証の続き</h3>
+                <ul class="lesson-list">
+                  <li>Firebase Authenticationについて</li>
+                  <li>ログイン処理を実装</li>
+                  <li>ユーザー認証の流れを確認</li>
+                </ul>
+              </div>
+              <div class="lesson-panel" id="panel-current" role="tabpanel" aria-labelledby="tab-current">
+                <p class="lesson-label">今回 ・ 10月4日</p>
+                <h3 class="lesson-heading">Firestoreにデータを保存する</h3>
+                <ul class="lesson-list">
+                  <li>コレクションとドキュメントの構造</li>
+                  <li>ログインユーザーごとにデータを保存</li>
+                  <li>保存処理を画面から呼び出す</li>
+                </ul>
+              </div>
+              <div class="lesson-panel" id="panel-next" role="tabpanel" aria-labelledby="tab-next" hidden>
+                <p class="lesson-label">次回 ・ 10月11日</p>
+                <h3 class="lesson-heading">保存したデータを表示する</h3>
+                <ul class="lesson-list">
+                  <li>Firestoreからのデータ取得</li>
+                  <li>取得した内容を一覧に表示</li>
+                </ul>
+              </div>
+
+              <div class="free-note">
+                <div class="free-note-heading">
+                  <h3 class="panel-title" style="font-size:13px;margin:0">自由メモ</h3>
+                  <span class="panel-note">自分用</span>
+                </div>
+                <textarea id="free-note" placeholder="気づいたことや、あとで確認したいこと"></textarea>
+                <div class="note-actions">
+                  <span class="save-status" id="save-status" aria-live="polite"></span>
+                  <button class="button button-small" id="save-note" type="button">メモを保存</button>
+                </div>
+                <p class="storage-note">この試作の自由メモは、このブラウザー内に保存されます。</p>
+              </div>
+
+              <section class="lesson-history" aria-labelledby="history-heading">
+                <div class="panel-heading">
+                  <h3 class="panel-title" id="history-heading" style="font-size:13px">授業の履歴</h3>
+                  <span class="panel-note">最近の記録</span>
+                </div>
+                <div class="history-list">
+                  <article class="history-entry">
+                    <span class="history-date">9月28日</span>
+                    <span class="history-entry-title">認証とログイン処理</span>
+                  </article>
+                  <article class="history-entry">
+                    <span class="history-date">9月21日</span>
+                    <span class="history-entry-title">Firestoreの準備</span>
+                  </article>
+                  <article class="history-entry">
+                    <span class="history-date">9月14日</span>
+                    <span class="history-entry-title">Reactと開発環境</span>
+                  </article>
+                </div>
+              </section>
+            </section>
+
+            <aside class="card related-panel" aria-label="科目に関連する情報">
+              <section class="related-section">
+                <h2 class="related-heading">関連課題</h2>
+                <article class="related-item">
+                  <p class="related-title">Firestore保存処理を実装する</p>
+                  <p class="related-meta">期限 10月9日（金） ・ 未完了</p>
+                </article>
+              </section>
+              <section class="related-section">
+                <h2 class="related-heading">関連リンク</h2>
+                <div class="related-link-list">
+                  <a class="related-link" href="https://zoom.us/" target="_blank" rel="noopener noreferrer">補講 Zoom を開く <span class="external-mark" aria-hidden="true">↗</span></a>
+                  <a class="related-link" href="https://classroom.google.com/" target="_blank" rel="noopener noreferrer">講義資料を見る <span class="external-mark" aria-hidden="true">↗</span></a>
+                  <a class="related-link" href="https://github.com/" target="_blank" rel="noopener noreferrer">授業用 GitHub <span class="external-mark" aria-hidden="true">↗</span></a>
+                </div>
+              </section>
+            </aside>
+          </div>
+        </section>
+
+        <section class="page-wrap" id="calendar-view" data-page="calendar" aria-labelledby="calendar-title" hidden>
+          <div class="page-heading">
+            <div><p class="eyebrow">SCHEDULE</p><h1 id="calendar-title">カレンダー</h1><p class="heading-subtitle">日付から、今日の流れを確認。</p></div>
+            <div class="toolbar"><button class="button icon-button" type="button" aria-label="前の月" disabled>‹</button><h2 class="toolbar-title">2026年10月</h2><button class="button icon-button" type="button" aria-label="次の月" disabled>›</button><button class="button button-small" type="button" data-date="4">今日</button></div>
+          </div>
+          <div class="calendar-layout">
+            <section class="card calendar-panel" aria-label="2026年10月のカレンダー">
+              <div class="calendar-weekdays"><span class="calendar-weekday">日</span><span class="calendar-weekday">月</span><span class="calendar-weekday">火</span><span class="calendar-weekday">水</span><span class="calendar-weekday">木</span><span class="calendar-weekday">金</span><span class="calendar-weekday">土</span></div>
+              <div class="calendar-days" id="calendar-days">
+                <button class="calendar-day is-muted" type="button">27</button><button class="calendar-day is-muted" type="button">28</button><button class="calendar-day is-muted" type="button">29</button><button class="calendar-day is-muted" type="button">30</button><button class="calendar-day has-events" type="button" data-date="1">1</button><button class="calendar-day has-events" type="button" data-date="2">2</button><button class="calendar-day" type="button" data-date="3">3</button>
+                <button class="calendar-day is-selected has-events" type="button" data-date="4">4</button><button class="calendar-day has-events" type="button" data-date="5">5</button><button class="calendar-day has-events" type="button" data-date="6">6</button><button class="calendar-day has-events" type="button" data-date="7">7</button><button class="calendar-day has-events" type="button" data-date="8">8</button><button class="calendar-day has-events" type="button" data-date="9">9</button><button class="calendar-day" type="button" data-date="10">10</button>
+                <button class="calendar-day" type="button" data-date="11">11</button><button class="calendar-day" type="button" data-date="12">12</button><button class="calendar-day" type="button" data-date="13">13</button><button class="calendar-day" type="button" data-date="14">14</button><button class="calendar-day" type="button" data-date="15">15</button><button class="calendar-day" type="button" data-date="16">16</button><button class="calendar-day" type="button" data-date="17">17</button>
+                <button class="calendar-day" type="button" data-date="18">18</button><button class="calendar-day" type="button" data-date="19">19</button><button class="calendar-day" type="button" data-date="20">20</button><button class="calendar-day" type="button" data-date="21">21</button><button class="calendar-day" type="button" data-date="22">22</button><button class="calendar-day" type="button" data-date="23">23</button><button class="calendar-day" type="button" data-date="24">24</button>
+                <button class="calendar-day" type="button" data-date="25">25</button><button class="calendar-day" type="button" data-date="26">26</button><button class="calendar-day" type="button" data-date="27">27</button><button class="calendar-day" type="button" data-date="28">28</button><button class="calendar-day" type="button" data-date="29">29</button><button class="calendar-day" type="button" data-date="30">30</button><button class="calendar-day" type="button" data-date="31">31</button>
+              </div>
+            </section>
+            <section class="card agenda-panel" aria-labelledby="agenda-title">
+              <div class="panel-heading"><h2 class="panel-title" id="agenda-title">10月4日（日）の予定</h2><span class="count-pill" id="agenda-count">3件</span></div>
+              <div class="agenda-list">
+                <article class="agenda-row" data-agenda-date="4"><time class="schedule-time">09:10</time><span class="schedule-marker"></span><div><p class="event-title">Webアプリ開発</p><p class="event-detail">対面 ・ 302教室</p></div><button class="button button-small" type="button" data-view="subject">科目へ →</button></article>
+                <article class="agenda-row" data-agenda-date="4"><time class="schedule-time">13:00</time><span class="schedule-marker schedule-marker-group"></span><div><p class="event-title">グループ開発</p><p class="event-detail">オンライン ・ Zoom</p></div><span class="event-label">予定</span></article>
+                <article class="agenda-row" data-agenda-date="4"><time class="schedule-time">18:00</time><span class="schedule-marker schedule-marker-work"></span><div><p class="event-title">バイト</p><p class="event-detail">出勤 ・ 22:00まで</p></div><span class="event-label">シフト</span></article>
+              </div>
+              <p class="empty-state" id="agenda-empty" hidden>この日の予定はありません。</p>
+            </section>
+          </div>
+        </section>
+
+        <section class="page-wrap" id="school-view" data-page="school" aria-labelledby="school-title" hidden>
+          <div class="page-heading"><div><p class="eyebrow">SCHOOL</p><h1 id="school-title">学校</h1><p class="heading-subtitle">今週の時間割と、今日の授業。</p></div><div class="page-actions"><button class="button button-primary button-small" type="button" data-view="subject">科目を見る →</button><button class="button button-small" type="button" data-view="notes">授業メモへ</button></div></div>
+          <section class="card data-panel">
+            <div class="school-toolbar"><h2 class="panel-title">時間割</h2><span class="count-pill">2026年度 前期</span></div>
+            <div class="table-scroll"><div class="timetable" role="grid" aria-label="週間時間割">
+              <div class="timetable-cell timetable-head">時限</div><div class="timetable-cell timetable-head">月</div><div class="timetable-cell timetable-head">火</div><div class="timetable-cell timetable-head">水</div><div class="timetable-cell timetable-head">木</div><div class="timetable-cell timetable-head">金</div>
+              <div class="timetable-cell period-cell">1限<br />09:10</div><div class="timetable-cell"><button class="class-chip" type="button" data-view="subject">Webアプリ開発<small>対面 ・ 302教室</small></button></div><div class="timetable-cell"></div><div class="timetable-cell"><button class="class-chip zoom" type="button" data-view="subject">データベース<small>Zoom</small></button></div><div class="timetable-cell"></div><div class="timetable-cell"></div>
+              <div class="timetable-cell period-cell">2限<br />10:50</div><div class="timetable-cell"></div><div class="timetable-cell"><button class="class-chip zoom" type="button" data-view="subject">グループ開発<small>Zoom</small></button></div><div class="timetable-cell"></div><div class="timetable-cell"><button class="class-chip" type="button" data-view="subject">プログラミング<small>対面</small></button></div><div class="timetable-cell"></div>
+              <div class="timetable-cell period-cell">3限<br />13:10</div><div class="timetable-cell"><button class="class-chip" type="button" data-view="subject">データベース<small>対面</small></button></div><div class="timetable-cell"></div><div class="timetable-cell"></div><div class="timetable-cell"></div><div class="timetable-cell"><button class="class-chip" type="button" data-view="subject">Webアプリ開発<small>対面</small></button></div>
+              <div class="timetable-cell period-cell">4限<br />14:50</div><div class="timetable-cell"></div><div class="timetable-cell"></div><div class="timetable-cell"><button class="class-chip" type="button" data-view="subject">キャリアデザイン<small>対面</small></button></div><div class="timetable-cell"></div><div class="timetable-cell"></div>
+            </div></div>
+            <section class="related-section"><div class="panel-heading"><h2 class="panel-title">今日の授業</h2><button class="button button-small" type="button" data-view="calendar">今日の予定 →</button></div><div class="info-row"><span><strong>09:10</strong>　Webアプリ開発 <span class="panel-note">302教室</span></span><button class="button button-small" type="button" data-view="subject">科目ページ</button></div><div class="info-row"><span><strong>13:00</strong>　グループ開発 <span class="panel-note">Zoom</span></span><span class="event-label">オンライン</span></div></section>
+          </section>
+        </section>
+
+        <section class="page-wrap" id="subject-view" data-page="subject" aria-labelledby="subject-overview-title" hidden>
+          <nav class="breadcrumb" aria-label="パンくずリスト"><button type="button" data-view="school">学校</button><span aria-hidden="true">/</span><span>科目</span><span aria-hidden="true">/</span><span>Webアプリ開発</span></nav>
+          <div class="subject-heading"><div><p class="eyebrow">SUBJECT / 2026年度</p><h1 class="subject-title" id="subject-overview-title">Webアプリ開発</h1><p class="subject-subtitle">月曜 09:10 - 10:40 ・ 今週の授業</p></div><div class="subject-actions"><a class="button button-primary" href="https://zoom.us/" target="_blank" rel="noopener noreferrer">Zoomを開く ↗</a><a class="button" href="https://classroom.google.com/" target="_blank" rel="noopener noreferrer">資料を見る ↗</a></div></div>
+          <div class="detail-tabs" aria-label="科目内の情報"><button class="detail-tab is-active" type="button" data-view="subject">概要</button><button class="detail-tab" type="button" data-view="notes">授業メモ</button><button class="detail-tab" type="button" data-view="tasks">課題</button><button class="detail-tab" type="button" data-view="tasks">テスト</button><button class="detail-tab" type="button" data-view="calendar">予定</button></div>
+          <div class="subject-overview">
+            <section class="card data-panel"><h2 class="panel-title">授業の概要</h2><p class="course-description">Webアプリケーションの開発に必要な基礎知識と実践的なスキルを学びます。HTML/CSS/JavaScript、フレームワークの基礎を学習します。</p><div class="stat-grid"><div class="stat-card"><span class="stat-label">授業形式</span><span class="class-badge">🏫 対面</span></div><div class="stat-card"><span class="stat-label">教室</span><span class="meta-value">302教室</span></div><div class="stat-card"><span class="stat-label">出席状況</span><span class="meta-value">出席 12 / 14</span></div></div><section class="related-section"><div class="panel-heading"><h2 class="panel-title">今日の予定</h2><span class="panel-note">10月4日（日）</span></div><div class="info-row"><span><strong>09:10 - 10:40</strong>　Webアプリ開発</span><button class="button button-small" type="button" data-view="notes">授業メモ →</button></div></section></section>
+            <aside class="card data-panel"><div class="panel-heading"><h2 class="panel-title">次の課題</h2><span class="due-label">期限 10/9</span></div><div class="related-item"><p class="related-title">Firestore保存処理を実装する</p><p class="related-meta">未完了 ・ Webアプリ開発</p></div><button class="button button-small" type="button" data-view="tasks">課題一覧を見る →</button><section class="related-section"><h2 class="related-heading">最近の授業メモ</h2><p class="related-title">前回: Firebase Authentication</p><p class="related-meta">ログイン処理を実装</p><button class="button button-small" type="button" data-view="notes">授業メモを開く →</button></section></aside>
+          </div>
+        </section>
+
+        <section class="page-wrap" id="tasks-view" data-page="tasks" aria-labelledby="tasks-title" hidden>
+          <div class="page-heading"><div><p class="eyebrow">MY WORK</p><h1 id="tasks-title">タスク</h1><p class="heading-subtitle">締切の近いものから、今日やることを確認。</p></div><button class="button button-primary button-small" type="button">＋ タスクを追加</button></div>
+          <div class="filter-row" role="group" aria-label="タスクの絞り込み"><button class="filter-button" type="button" data-task-filter="all" aria-pressed="true">すべて</button><button class="filter-button" type="button" data-task-filter="today" aria-pressed="false">今日</button><button class="filter-button" type="button" data-task-filter="week" aria-pressed="false">今週</button><button class="filter-button" type="button" data-task-filter="done" aria-pressed="false">完了済み</button></div>
+          <section class="card data-panel"><h2 class="panel-title" style="margin-bottom:12px">今日のタスク</h2><div class="task-list">
+            <label class="task-item" data-task="today"><input type="checkbox" /><span class="task-copy"><span class="task-title">DB課題を提出する</span><span class="task-meta">Webアプリ開発 ・ 課題</span></span><span class="due-label">期限 10/5</span></label>
+            <label class="task-item" data-task="today"><input type="checkbox" /><span class="task-copy"><span class="task-title">グループ開発の資料作成</span><span class="task-meta">グループ開発 ・ 自分の担当</span></span><span class="due-label">今日</span></label>
+            <label class="task-item" data-task="week"><input type="checkbox" /><span class="task-copy"><span class="task-title">レポート作成</span><span class="task-meta">データベース ・ レポート</span></span><span class="due-label">期限 10/8</span></label>
+            <label class="task-item" data-task="week"><input type="checkbox" /><span class="task-copy"><span class="task-title">授業メモを整理する</span><span class="task-meta">Webアプリ開発</span></span><span class="event-label">今週</span></label>
+          </div></section>
+        </section>
+
+        <section class="page-wrap" id="projects-view" data-page="projects" aria-labelledby="projects-title" hidden>
+          <div class="page-heading"><div><p class="eyebrow">PROJECTS</p><h1 id="projects-title">プロジェクト</h1><p class="heading-subtitle">進捗と次の予定をまとめて確認。</p></div><button class="button button-primary button-small" type="button">＋ プロジェクトを追加</button></div>
+          <div class="filter-row" role="group" aria-label="プロジェクトの状態"><button class="filter-button" type="button" data-project-filter="進行中" aria-pressed="true">進行中</button><button class="filter-button" type="button" data-project-filter="完了" aria-pressed="false">完了</button><button class="filter-button" type="button" data-project-filter="アーカイブ" aria-pressed="false">アーカイブ</button></div>
+          <div class="project-grid"><article class="card project-card" data-project-state="進行中"><p class="project-title">統合版 Life OS</p><p class="project-subtitle">学校生活をまとめて管理する個人OS</p><div class="progress-line"><div class="progress-fill" style="width:70%"></div></div><div class="project-bottom"><span>進捗 70%</span><span>期限 10/20</span></div><div class="info-row"><span class="panel-note">次の予定: UIの見直し</span><button class="button button-small" type="button" data-view="tasks">タスク</button></div></article><article class="card project-card" data-project-state="進行中"><p class="project-title">企業連携ポータル</p><p class="project-subtitle">学校連携プロジェクト</p><div class="progress-line"><div class="progress-fill" style="width:40%"></div></div><div class="project-bottom"><span>進捗 40%</span><span>期限 10/15</span></div><div class="info-row"><span class="panel-note">次の予定: 10/10 Zoom</span><button class="button button-small" type="button" data-view="calendar">予定</button></div></article><article class="card project-card" data-project-state="進行中"><p class="project-title">School & Work</p><p class="project-subtitle">時間割・シフト管理</p><div class="progress-line"><div class="progress-fill" style="width:90%"></div></div><div class="project-bottom"><span>進捗 90%</span><span>期限 10/10</span></div></article></div>
+          <p class="empty-state" id="project-empty" hidden>該当するプロジェクトはありません。</p>
+        </section>
+
+        <section class="page-wrap" id="work-view" data-page="work" aria-labelledby="work-title" hidden>
+          <div class="page-heading"><div><p class="eyebrow">PART-TIME WORK</p><h1 id="work-title">バイト</h1><p class="heading-subtitle">今週のシフトと今月の勤務見込み。</p></div><button class="button button-primary button-small" type="button">＋ シフトを追加</button></div>
+          <div class="work-tabs" role="tablist" aria-label="バイト情報"><button class="work-tab" type="button" role="tab" aria-selected="true" data-work-tab="shifts">シフト</button><button class="work-tab" type="button" role="tab" aria-selected="false" data-work-tab="history">勤務履歴</button><button class="work-tab" type="button" role="tab" aria-selected="false" data-work-tab="pay">給与予測</button></div>
+          <section class="shift-grid" data-work-panel="shifts"><article class="card data-panel"><div class="panel-heading"><h2 class="panel-title">今週のシフト</h2><span class="count-pill">3件</span></div><div class="shift-row"><span class="schedule-time">月</span><span><strong>18:00 - 22:00</strong><span class="event-detail" style="display:block">マック</span></span><span class="money">4.0時間</span></div><div class="shift-row"><span class="schedule-time">水</span><span><strong>18:00 - 22:00</strong><span class="event-detail" style="display:block">マック</span></span><span class="money">4.0時間</span></div><div class="shift-row"><span class="schedule-time">土</span><span><strong>11:00 - 20:00</strong><span class="event-detail" style="display:block">マック ・ 休憩60分</span></span><span class="money">8.0時間</span></div></article><aside class="card data-panel"><h2 class="panel-title">今月の見込み</h2><div class="info-row"><span>勤務時間</span><strong>42時間</strong></div><div class="info-row"><span>時給</span><strong>¥1,150</strong></div><div class="info-row"><span>見込み給料</span><strong class="money-positive">¥48,300</strong></div></aside></section>
+          <section class="card data-panel" data-work-panel="history" hidden><h2 class="panel-title">勤務履歴</h2><div class="shift-row"><span>10/1</span><span>マック ・ 18:00 - 22:00</span><strong>¥4,600</strong></div><div class="shift-row"><span>9/28</span><span>マック ・ 11:00 - 20:00</span><strong>¥9,200</strong></div></section>
+          <section class="card data-panel" data-work-panel="pay" hidden><h2 class="panel-title">給与予測</h2><p class="course-description">今月の予定シフトから計算した見込みです。</p><div class="stat-card"><span class="stat-label">10月の見込み</span><span class="stat-value money-positive">¥48,300</span></div><p class="panel-note" style="margin-top:10px">実際の支給額とは異なる場合があります。</p></section>
+        </section>
+
+        <section class="page-wrap" id="finance-view" data-page="finance" aria-labelledby="finance-title" hidden>
+          <div class="page-heading"><div><p class="eyebrow">MONEY</p><h1 id="finance-title">収支</h1><p class="heading-subtitle">今月の収入・支出を確認。</p></div><button class="button button-primary button-small" type="button">＋ 収支を追加</button></div>
+          <div class="finance-summary"><article class="stat-card"><span class="stat-label">収入</span><span class="stat-value money-positive">¥94,000</span></article><article class="stat-card"><span class="stat-label">支出</span><span class="stat-value money-negative">¥31,500</span></article><article class="stat-card"><span class="stat-label">差引</span><span class="stat-value">¥62,500</span></article></div>
+          <section class="card data-panel"><div class="panel-heading"><h2 class="panel-title">月ごとの収支</h2><div class="toolbar"><button class="button icon-button" type="button" aria-label="前の月">‹</button><span class="panel-note">2026年10月</span><button class="button icon-button" type="button" aria-label="次の月">›</button></div></div><div class="finance-chart" aria-label="収入と支出のグラフ"><div><div class="bar-group"><span class="bar" style="height:90px"></span><span class="bar expense" style="height:42px"></span></div><span class="bar-label">7月</span></div><div><div class="bar-group"><span class="bar" style="height:115px"></span><span class="bar expense" style="height:54px"></span></div><span class="bar-label">8月</span></div><div><div class="bar-group"><span class="bar" style="height:80px"></span><span class="bar expense" style="height:58px"></span></div><span class="bar-label">9月</span></div><div><div class="bar-group"><span class="bar" style="height:125px"></span><span class="bar expense" style="height:45px"></span></div><span class="bar-label">10月</span></div></div><div class="panel-heading" style="margin-top:18px"><h2 class="panel-title">最近の記録</h2><span class="panel-note">10月</span></div><div class="info-row"><span>10/3　バイト給料</span><strong class="money-positive">+¥48,300</strong></div><div class="info-row"><span>10/2　食費</span><strong class="money-negative">-¥1,200</strong></div><div class="info-row"><span>10/1　交通費</span><strong class="money-negative">-¥540</strong></div></section>
+        </section>
+
+        <section class="page-wrap" id="links-view" data-page="links" aria-labelledby="links-title" hidden>
+          <div class="page-heading"><div><p class="eyebrow">QUICK ACCESS</p><h1 id="links-title">リンク</h1><p class="heading-subtitle">よく使うサービスをすぐに開く。</p></div><button class="button button-primary button-small" type="button">＋ リンクを追加</button></div>
+          <div class="link-tools"><input class="search-input" id="link-search" type="search" placeholder="リンクを検索" aria-label="リンクを検索" /><div class="filter-row" style="margin:0"><button class="filter-button" type="button" data-link-filter="all" aria-pressed="true">すべて</button><button class="filter-button" type="button" data-link-filter="school" aria-pressed="false">学校</button><button class="filter-button" type="button" data-link-filter="personal" aria-pressed="false">個人</button></div></div>
+          <section class="card data-panel" id="link-list"><h2 class="link-category">学校・授業</h2><div class="related-link-list"><a class="related-link searchable-link" data-link-category="school" href="https://classroom.google.com/" target="_blank" rel="noopener noreferrer"><span>Classroom</span><span class="external-mark">↗</span></a><a class="related-link searchable-link" data-link-category="school" href="https://mail.google.com/" target="_blank" rel="noopener noreferrer"><span>学校メール</span><span class="external-mark">↗</span></a><a class="related-link searchable-link" data-link-category="school" href="https://example.com/" target="_blank" rel="noopener noreferrer"><span>学校ポータル</span><span class="external-mark">↗</span></a></div><h2 class="link-category">オンライン</h2><div class="related-link-list"><a class="related-link searchable-link" data-link-category="personal" href="https://zoom.us/" target="_blank" rel="noopener noreferrer"><span>Zoom</span><span class="external-mark">↗</span></a><a class="related-link searchable-link" data-link-category="personal" href="https://teams.microsoft.com/" target="_blank" rel="noopener noreferrer"><span>Teams</span><span class="external-mark">↗</span></a></div><h2 class="link-category">開発・デザイン</h2><div class="related-link-list"><a class="related-link searchable-link" data-link-category="personal" href="https://github.com/" target="_blank" rel="noopener noreferrer"><span>GitHub</span><span class="external-mark">↗</span></a><a class="related-link searchable-link" data-link-category="personal" href="https://www.figma.com/" target="_blank" rel="noopener noreferrer"><span>Figma</span><span class="external-mark">↗</span></a></div><p class="link-disclaimer">学校ポータルはデモリンクです。</p></section>
+        </section>
+      </main>
+    </div>
+
+    <script>
+      const topbarContext = document.getElementById('topbar-context');
+      const pages = [...document.querySelectorAll('[data-page]')];
+      const navigationButtons = [...document.querySelectorAll('.nav-item[data-view]')];
+      const viewLabels = {
+        home: 'ホーム',
+        calendar: 'カレンダー',
+        school: '学校 / 時間割',
+        subject: '学校 / Webアプリ開発',
+        notes: '授業メモ / Webアプリ開発',
+        tasks: 'タスク',
+        projects: 'プロジェクト',
+        work: 'バイト',
+        finance: '収支',
+        links: 'リンク'
+      };
+
+      function showView(viewName) {
+        if (!pages.some((page) => page.dataset.page === viewName)) return;
+        pages.forEach((page) => {
+          page.hidden = page.dataset.page !== viewName;
+          page.classList.toggle('view-transition', page.dataset.page === viewName);
+        });
+        const activeNavView = viewName === 'subject' || viewName === 'notes' ? 'school' : viewName;
+        topbarContext.textContent = viewLabels[viewName] || 'Life OS';
+        navigationButtons.forEach((button) => {
+          if (button.dataset.view === activeNavView) button.setAttribute('aria-current', 'page');
+          else button.removeAttribute('aria-current');
+        });
+        if (viewName === 'notes') loadDraft();
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+      }
+
+      document.querySelectorAll('[data-view]').forEach((button) => {
+        button.addEventListener('click', () => showView(button.dataset.view));
+      });
+      document.querySelectorAll('[data-view-link]').forEach((link) => {
+        link.addEventListener('click', (event) => {
+          event.preventDefault();
+          showView(link.dataset.viewLink);
+        });
+      });
+      document.querySelectorAll('[data-open-notes]').forEach((button) => {
+        button.addEventListener('click', () => showView('notes'));
+      });
+
+      const noteTabs = [...document.querySelectorAll('[data-note-tab]')];
+      noteTabs.forEach((tab) => {
+        tab.addEventListener('click', () => {
+          const selected = tab.dataset.noteTab;
+          noteTabs.forEach((item) => item.setAttribute('aria-selected', String(item === tab)));
+          document.querySelectorAll('[role="tabpanel"]').forEach((panel) => {
+            panel.hidden = panel.id !== `panel-${selected}`;
+          });
+        });
+      });
+
+      const draftKey = 'unified-life-os-ui-prototype:lesson-note';
+      const freeNote = document.getElementById('free-note');
+      const saveStatus = document.getElementById('save-status');
+
+      function loadDraft() {
+        freeNote.value = localStorage.getItem(draftKey) || '';
+        saveStatus.textContent = '';
+      }
+
+      document.getElementById('save-note').addEventListener('click', () => {
+        localStorage.setItem(draftKey, freeNote.value);
+        saveStatus.textContent = '保存しました';
+      });
+
+      freeNote.addEventListener('input', () => {
+        saveStatus.textContent = '';
+      });
+
+      document.querySelectorAll('[data-task-filter]').forEach((button) => {
+        button.addEventListener('click', () => {
+          const filter = button.dataset.taskFilter;
+          document.querySelectorAll('[data-task-filter]').forEach((item) => item.setAttribute('aria-pressed', String(item === button)));
+          document.querySelectorAll('.task-item').forEach((task) => {
+            const complete = task.querySelector('input').checked;
+            task.hidden = filter === 'today' ? task.dataset.task !== 'today' : filter === 'week' ? !['today', 'week'].includes(task.dataset.task) : filter === 'done' ? !complete : false;
+          });
+        });
+      });
+
+      document.querySelectorAll('.task-item input').forEach((checkbox) => {
+        checkbox.addEventListener('change', () => {
+          checkbox.closest('.task-item').classList.toggle('is-complete', checkbox.checked);
+        });
+      });
+
+      document.querySelectorAll('[data-project-filter]').forEach((button) => {
+        button.addEventListener('click', () => {
+          const filter = button.dataset.projectFilter;
+          document.querySelectorAll('[data-project-filter]').forEach((item) => item.setAttribute('aria-pressed', String(item === button)));
+          const projects = [...document.querySelectorAll('[data-project-state]')];
+          projects.forEach((project) => {
+            project.hidden = project.dataset.projectState !== filter;
+          });
+          document.getElementById('project-empty').hidden = projects.some((project) => !project.hidden);
+        });
+      });
+
+      document.querySelectorAll('[data-work-tab]').forEach((tab) => {
+        tab.addEventListener('click', () => {
+          const selected = tab.dataset.workTab;
+          document.querySelectorAll('[data-work-tab]').forEach((item) => item.setAttribute('aria-selected', String(item === tab)));
+          document.querySelectorAll('[data-work-panel]').forEach((panel) => {
+            panel.hidden = panel.dataset.workPanel !== selected;
+          });
+        });
+      });
+
+      const linkSearch = document.getElementById('link-search');
+      let linkCategory = 'all';
+      const applyLinkFilters = () => {
+        const query = linkSearch.value.trim().toLocaleLowerCase('ja');
+        document.querySelectorAll('.searchable-link').forEach((link) => {
+          const matchesText = link.textContent.toLocaleLowerCase('ja').includes(query);
+          const matchesCategory = linkCategory === 'all' || link.dataset.linkCategory === linkCategory;
+          link.hidden = !matchesText || !matchesCategory;
+        });
+        document.querySelectorAll('#link-list .related-link-list').forEach((list) => {
+          const hasVisibleLink = [...list.querySelectorAll('.searchable-link')].some((link) => !link.hidden);
+          list.hidden = !hasVisibleLink;
+          list.previousElementSibling.hidden = !hasVisibleLink;
+        });
+      };
+      linkSearch.addEventListener('input', applyLinkFilters);
+
+      document.querySelectorAll('[data-link-filter]').forEach((button) => {
+        button.addEventListener('click', () => {
+          linkCategory = button.dataset.linkFilter;
+          document.querySelectorAll('[data-link-filter]').forEach((item) => item.setAttribute('aria-pressed', String(item === button)));
+          applyLinkFilters();
+        });
+      });
+
+      function selectCalendarDay(day) {
+        document.querySelectorAll('.calendar-day[data-date]').forEach((item) => item.classList.toggle('is-selected', Number(item.dataset.date) === day));
+        const date = new Date(2026, 9, day);
+        const weekday = ['日', '月', '火', '水', '木', '金', '土'][date.getDay()];
+        const agendaRows = [...document.querySelectorAll('[data-agenda-date]')];
+        const visibleRows = agendaRows.filter((row) => Number(row.dataset.agendaDate) === day);
+        agendaRows.forEach((row) => { row.hidden = Number(row.dataset.agendaDate) !== day; });
+        document.getElementById('agenda-title').textContent = `10月${day}日（${weekday}）の予定`;
+        document.getElementById('agenda-count').textContent = `${visibleRows.length}件`;
+        document.getElementById('agenda-empty').hidden = visibleRows.length > 0;
+      }
+
+      document.querySelectorAll('.calendar-day[data-date]').forEach((dayButton) => {
+        dayButton.addEventListener('click', () => selectCalendarDay(Number(dayButton.dataset.date)));
+      });
+      document.querySelector('.toolbar [data-date="4"]').addEventListener('click', () => selectCalendarDay(4));
+    </script>
+  </body>
+</html>

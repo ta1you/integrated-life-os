@@ -1,0 +1,1223 @@
+﻿import { useEffect, useState, type FormEvent } from 'react';
+import {
+  Bell,
+  BookOpen,
+  BriefcaseBusiness,
+  CalendarDays,
+  Check,
+  CheckCircle2,
+  ChevronRight,
+  Clock3,
+  ExternalLink,
+  FolderKanban,
+  House,
+  Link2,
+  ListTodo,
+  NotebookPen,
+  Plus,
+  Wallet,
+} from 'lucide-react';
+import { demoSchedule, demoTasks, lessonNotes, quickLinks, type LessonSection } from './data';
+
+type View = 'home' | 'calendar' | 'school' | 'subject' | 'tasks' | 'projects' | 'work' | 'finance' | 'links';
+
+const navItems = [
+  { id: 'home', label: 'ホーム', icon: House },
+  { id: 'calendar', label: 'カレンダー', icon: CalendarDays },
+  { id: 'school', label: '学校', icon: BookOpen },
+  { id: 'subject', label: '科目', icon: NotebookPen },
+  { id: 'tasks', label: 'タスク', icon: ListTodo },
+  { id: 'projects', label: 'プロジェクト', icon: FolderKanban },
+  { id: 'work', label: 'バイト', icon: BriefcaseBusiness },
+  { id: 'finance', label: '収支', icon: Wallet },
+  { id: 'links', label: 'リンク', icon: Link2 },
+] as const;
+
+const lessonTabs: { id: LessonSection; label: string }[] = [
+  { id: 'previous', label: '前回' },
+  { id: 'current', label: '今回' },
+  { id: 'next', label: '次回' },
+];
+
+const subjectFollowUpTask = {
+  id: 'webapp-data-save',
+  title: 'Firebaseのデータ保存を確認する',
+  context: 'Webアプリ開発・次回まで',
+  deadline: '10/8',
+};
+
+const demoProjects = [
+  {
+    name: 'グループ開発',
+    status: '進行中',
+    completedStages: 2,
+    stages: ['要件整理', '企画・構成', '設計確認', '実装', 'テスト', '発表準備'],
+    nextAction: '資料の確認と共有',
+    deadline: '10/12',
+    relatedTask: 'グループ開発の資料を確認する',
+    history: ['10/3 企画と画面構成を確認', '10/5 設計内容を確認中'],
+  },
+  {
+    name: '統合版 Life OS',
+    status: '進行中',
+    completedStages: 2,
+    stages: ['方針整理', '画面構成', 'UI整理', '動作確認', 'データ設計'],
+    nextAction: '画面ごとの役割を整理する',
+    deadline: '未設定',
+    relatedTask: '次の作業をTasksで確認する',
+    history: ['10/3 画面構成を決定', '10/5 UIの整理を開始'],
+  },
+];
+
+type DemoShift = {
+  day: string;
+  start: string;
+  end: string;
+  breakMinutes: number;
+};
+
+const hourlyRate = 1150;
+const demoShifts: DemoShift[] = [
+  { day: '月', start: '18:00', end: '22:00', breakMinutes: 0 },
+  { day: '水', start: '18:00', end: '22:00', breakMinutes: 0 },
+  { day: '金', start: '11:00', end: '20:00', breakMinutes: 60 },
+];
+
+type DemoExpense = {
+  id: number;
+  name: string;
+  amount: number;
+  category: string;
+  date: string;
+};
+
+const financeCategories = ['食費', '交通費', '学校', 'バイト関連', '趣味', '日用品', 'バイク', 'その他'];
+const initialExpenses: DemoExpense[] = [
+  { id: 1, name: '家賃', amount: 32000, category: 'その他', date: '10/1' },
+  { id: 2, name: '食費', amount: 7500, category: '食費', date: '10/3' },
+  { id: 3, name: '交通費', amount: 2300, category: '交通費', date: '10/4' },
+];
+
+function suggestExpenseCategory(name: string) {
+  if (/自販機|ラーメン|食事|飲食/.test(name)) return '食費';
+  if (/電車|バス|交通|定期/.test(name)) return '交通費';
+  if (/教科書|教材|学校/.test(name)) return '学校';
+  if (/バイト|勤務/.test(name)) return 'バイト関連';
+  if (/バイク|ガソリン|保険|パーツ/.test(name)) return 'バイク';
+  if (/日用品|洗剤|薬/.test(name)) return '日用品';
+  return 'その他';
+}
+
+function getShiftWorkMinutes(shift: DemoShift) {
+  const [startHour, startMinute] = shift.start.split(':').map(Number);
+  const [endHour, endMinute] = shift.end.split(':').map(Number);
+  const durationMinutes = endHour * 60 + endMinute - (startHour * 60 + startMinute);
+  return durationMinutes - shift.breakMinutes;
+}
+
+const scheduleToneLabel: Record<string, string> = {
+  school: '授業',
+  project: '開発',
+  work: '仕事',
+};
+
+function formatToday(date: Date) {
+  return new Intl.DateTimeFormat('ja-JP', {
+    month: 'long',
+    day: 'numeric',
+    weekday: 'short',
+  }).format(date);
+}
+
+function getTaskDeadlineTime(deadline: string, today: Date) {
+  if (deadline === '今日') {
+    return new Date(today.getFullYear(), today.getMonth(), today.getDate()).getTime();
+  }
+
+  const match = deadline.match(/^(\d{1,2})\/(\d{1,2})$/);
+  if (!match) return Number.MAX_SAFE_INTEGER;
+  return new Date(today.getFullYear(), Number(match[1]) - 1, Number(match[2])).getTime();
+}
+
+function greetingForHour(hour: number) {
+  if (hour < 11) return 'おはようございます';
+  if (hour < 18) return 'こんにちは';
+  return 'こんばんは';
+}
+
+function App() {
+  const [activeView, setActiveView] = useState<View>(() => {
+    const hash = window.location.hash.replace('#', '');
+    return navItems.some((item) => item.id === hash) ? (hash as View) : 'home';
+  });
+  const [selectedCalendarDate, setSelectedCalendarDate] = useState(() => new Date());
+  const [visibleCalendarMonth, setVisibleCalendarMonth] = useState(() => {
+    const now = new Date();
+    return new Date(now.getFullYear(), now.getMonth(), 1);
+  });
+  const [activeLessonTab, setActiveLessonTab] = useState<LessonSection>('previous');
+  const [subjectTaskAdded, setSubjectTaskAdded] = useState(false);
+  const [completedTaskIds, setCompletedTaskIds] = useState<string[]>([]);
+  const [taskFilter, setTaskFilter] = useState<'all' | 'open' | 'done'>('all');
+  const [expenses, setExpenses] = useState<DemoExpense[]>(initialExpenses);
+  const [isExpenseFormOpen, setIsExpenseFormOpen] = useState(false);
+  const [expenseName, setExpenseName] = useState('');
+  const [expenseAmount, setExpenseAmount] = useState('');
+  const [expenseCategory, setExpenseCategory] = useState('その他');
+  const [freeNote, setFreeNote] = useState(() => window.localStorage.getItem('unified-life-os-demo-note') ?? '');
+  const [noteSaved, setNoteSaved] = useState(false);
+
+  const today = new Date();
+  const tasks = subjectTaskAdded ? [subjectFollowUpTask, ...demoTasks] : demoTasks;
+  const nearestTaskDeadline = tasks
+    .filter((task) => !completedTaskIds.includes(task.id))
+    .sort((first, second) => getTaskDeadlineTime(first.deadline, today) - getTaskDeadlineTime(second.deadline, today))[0]?.deadline ?? '完了';
+  const weekStart = new Date(today);
+  weekStart.setDate(today.getDate() - ((today.getDay() + 6) % 7));
+  const weekEnd = new Date(weekStart);
+  weekEnd.setDate(weekStart.getDate() + 6);
+  const weekRangeLabel = `${new Intl.DateTimeFormat('ja-JP', { month: 'numeric', day: 'numeric' }).format(weekStart)}〜${new Intl.DateTimeFormat('ja-JP', { month: 'numeric', day: 'numeric' }).format(weekEnd)}`;
+  const calendarYear = visibleCalendarMonth.getFullYear();
+  const calendarMonthIndex = visibleCalendarMonth.getMonth();
+  const calendarDaysInMonth = new Date(calendarYear, calendarMonthIndex + 1, 0).getDate();
+  const calendarStartOffset = new Date(calendarYear, calendarMonthIndex, 1).getDay();
+  const calendarCellCount = Math.ceil((calendarStartOffset + calendarDaysInMonth) / 7) * 7;
+  const isSelectedDateToday = selectedCalendarDate.toDateString() === today.toDateString();
+  const selectedCalendarDateLabel = new Intl.DateTimeFormat('ja-JP', {
+    month: 'long',
+    day: 'numeric',
+    weekday: 'short',
+  }).format(selectedCalendarDate);
+  const selectedDaySchedule = isSelectedDateToday ? demoSchedule : [];
+  const completedTaskCount = tasks.filter((task) => completedTaskIds.includes(task.id)).length;
+  const plannedWorkMinutes = demoShifts.reduce((total, shift) => total + getShiftWorkMinutes(shift), 0);
+  const plannedWorkPay = Math.round((plannedWorkMinutes * hourlyRate) / 60);
+  const monthlyIncome = 84200;
+  const monthlyExpenses = expenses.reduce((total, expense) => total + expense.amount, 0);
+  const monthlyBalance = monthlyIncome - monthlyExpenses;
+  const visibleTasks = tasks.filter((task) => {
+    if (taskFilter === 'open') return !completedTaskIds.includes(task.id);
+    if (taskFilter === 'done') return completedTaskIds.includes(task.id);
+    return true;
+  });
+
+  const changeCalendarMonth = (offset: number) => {
+    const nextMonth = new Date(calendarYear, calendarMonthIndex + offset, 1);
+    setVisibleCalendarMonth(nextMonth);
+    setSelectedCalendarDate(nextMonth);
+  };
+
+  const selectTodayInCalendar = () => {
+    const currentDate = new Date();
+    setVisibleCalendarMonth(new Date(currentDate.getFullYear(), currentDate.getMonth(), 1));
+    setSelectedCalendarDate(currentDate);
+  };
+
+  useEffect(() => {
+    const syncViewFromHistory = () => {
+      const hash = window.location.hash.replace('#', '');
+      if (navItems.some((item) => item.id === hash)) {
+        setActiveView(hash as View);
+      } else {
+        setActiveView('home');
+      }
+    };
+
+    window.addEventListener('popstate', syncViewFromHistory);
+    return () => window.removeEventListener('popstate', syncViewFromHistory);
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    window.localStorage.setItem('unified-life-os-demo-note', freeNote);
+    setNoteSaved(true);
+    const timer = window.setTimeout(() => setNoteSaved(false), 1000);
+    return () => window.clearTimeout(timer);
+  }, [freeNote]);
+
+  const navigate = (view: View) => {
+    setActiveView(view);
+    window.history.pushState({}, '', `#${view}`);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  const toggleTask = (taskId: string) => {
+    setCompletedTaskIds((current) =>
+      current.includes(taskId) ? current.filter((id) => id !== taskId) : [...current, taskId],
+    );
+  };
+
+  const addSubjectFollowUpTask = () => setSubjectTaskAdded(true);
+
+  const submitExpense = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const amount = Number(expenseAmount);
+    if (!expenseName.trim() || !Number.isFinite(amount) || amount <= 0) return;
+
+    setExpenses((current) => [
+      {
+        id: Date.now(),
+        name: expenseName.trim(),
+        amount,
+        category: expenseCategory,
+        date: new Intl.DateTimeFormat('ja-JP', { month: 'numeric', day: 'numeric' }).format(today),
+      },
+      ...current,
+    ]);
+    setExpenseName('');
+    setExpenseAmount('');
+    setExpenseCategory('その他');
+    setIsExpenseFormOpen(false);
+  };
+
+  const lesson = lessonNotes[activeLessonTab];
+
+  const renderTopBar = (label: string) => (
+    <header className="topbar">
+      <div className="topbar-location">
+        <span className="topbar-dot" />
+        <span>{label}</span>
+      </div>
+      <div className="topbar-actions">
+        <span className="today-label">{formatToday(today)}</span>
+        <button className="topbar-icon" type="button" aria-label="通知">
+          <Bell size={17} />
+          <span className="notification-dot" />
+        </button>
+        <span className="topbar-avatar" aria-label="ユーザー">太</span>
+      </div>
+    </header>
+  );
+
+  const renderHome = () => (
+    <section className="page">
+      <div className="page-header">
+        <div>
+          <p className="eyebrow">TODAY</p>
+          <h1>今日の状況</h1>
+        </div>
+        <div className="status-pill">
+          <span className="status-sun">☀</span>
+          {greetingForHour(today.getHours())}
+        </div>
+      </div>
+
+      <div className="home-grid">
+        <section className="panel page-panel">
+          <div className="panel-header">
+            <div className="panel-title-wrap">
+              <span className="icon-badge icon-blue"><CalendarDays size={16} /></span>
+              <div>
+                <h2>今日の予定</h2>
+                <small>今日の流れを確認</small>
+              </div>
+            </div>
+            <button className="button button-small" type="button" onClick={() => navigate('calendar')}>
+              予定を見る
+            </button>
+          </div>
+
+          <div className="schedule-list compact-list">
+            {demoSchedule.map((item) => (
+              <div key={item.time} className="schedule-item">
+                <time className="schedule-time">{item.time}</time>
+                <span className={`schedule-bar ${item.tone}`} />
+                <div className="schedule-copy">
+                  <button
+                    type="button"
+                    className="schedule-title"
+                    onClick={() => navigate(item.isCourse ? 'subject' : item.tone === 'project' ? 'projects' : 'work')}
+                  >
+                    {item.title}
+                  </button>
+                  <p>{item.detail}</p>
+                </div>
+                <span className="schedule-tag">{scheduleToneLabel[item.tone]}</span>
+              </div>
+            ))}
+          </div>
+
+          <div className="inline-action-row">
+            <span>時間や場所などの詳細は、予定の関連画面で確認できます。</span>
+            <button className="button button-primary button-small" type="button" onClick={() => navigate('calendar')}>
+              今日の予定を見る
+            </button>
+          </div>
+        </section>
+
+        <aside className="stacked-side">
+          <section className="panel mini-panel">
+            <div className="panel-header compact-header">
+              <div className="panel-title-wrap">
+                <span className="icon-badge icon-violet"><ListTodo size={16} /></span>
+                <div>
+                  <h2>今日やること</h2>
+                  <small>残りのタスク</small>
+                </div>
+              </div>
+              <span className="tiny-badge">{tasks.filter((task) => !completedTaskIds.includes(task.id)).length}</span>
+            </div>
+
+            <div className="task-short-list">
+              {tasks.slice(0, 3).map((task) => (
+                <label key={task.id} className={`task-row ${completedTaskIds.includes(task.id) ? 'is-complete' : ''}`}>
+                  <input type="checkbox" checked={completedTaskIds.includes(task.id)} onChange={() => toggleTask(task.id)} />
+                  <span>{task.title}</span>
+                </label>
+              ))}
+            </div>
+
+            <div className="deadline-row">
+              <span>近い期限</span>
+              <strong>{nearestTaskDeadline}</strong>
+            </div>
+          </section>
+
+          <section className="panel mini-panel">
+            <div className="panel-header compact-header">
+              <div className="panel-title-wrap">
+                <span className="icon-badge icon-amber"><FolderKanban size={16} /></span>
+                <div>
+                  <h2>進行中のプロジェクト</h2>
+                  <small>現在の工程</small>
+                </div>
+              </div>
+            </div>
+            <div className="project-box">
+              <div className="project-headline">
+                <strong>グループ開発</strong>
+                <span>設計確認</span>
+              </div>
+              <p>次にやること: 資料の確認と共有</p>
+            </div>
+            <button type="button" className="inline-link" onClick={() => navigate('projects')}>
+              プロジェクトを開く <ChevronRight size={12} />
+            </button>
+          </section>
+        </aside>
+      </div>
+
+      <section className="panel full-width-panel">
+        <div className="panel-header">
+          <div className="panel-title-wrap">
+            <span className="icon-badge icon-slate"><Link2 size={16} /></span>
+            <div>
+              <h2>よく使う</h2>
+              <small>必要なページへすぐに</small>
+            </div>
+          </div>
+        </div>
+
+        <div className="quick-links-grid">
+          {quickLinks.map((link) => (
+            <a key={link.name} href={link.href} target="_blank" rel="noreferrer" className="quick-link-card">
+              <span className={`link-mark mark-${link.tone}`}>{link.mark}</span>
+              <span>{link.name}</span>
+              <ExternalLink size={12} />
+            </a>
+          ))}
+        </div>
+      </section>
+
+      <section className="panel full-width-panel note-panel">
+        <div className="panel-header">
+          <div className="panel-title-wrap">
+            <span className="icon-badge icon-amber"><Check size={16} /></span>
+            <div>
+              <h2>メモ</h2>
+              <small>今日の気持ちと忘れ物</small>
+            </div>
+          </div>
+          <span className="save-indicator">{noteSaved ? '保存済み' : '未保存'}</span>
+        </div>
+
+        <div className="note-editor">
+          <textarea
+            value={freeNote}
+            onChange={(event) => setFreeNote(event.target.value)}
+            placeholder="今日の重要メモをここに書いておくと、すぐに見返せます。"
+          />
+        </div>
+      </section>
+    </section>
+  );
+
+  const renderCalendar = () => (
+    <section className="page">
+      <div className="page-header">
+        <div>
+          <p className="eyebrow">CALENDAR</p>
+          <h1>予定を確認する</h1>
+        </div>
+        <button type="button" className="button button-primary button-small" onClick={selectTodayInCalendar}>
+          今日
+        </button>
+      </div>
+
+      <div className="calendar-layout">
+        <section className="panel page-panel">
+          <div className="panel-header">
+            <div className="panel-title-wrap">
+              <span className="icon-badge icon-blue"><CalendarDays size={16} /></span>
+              <div>
+                <h2>{new Intl.DateTimeFormat('ja-JP', { year: 'numeric', month: 'long' }).format(visibleCalendarMonth)}</h2>
+                <small>{selectedCalendarDateLabel}の予定</small>
+              </div>
+            </div>
+            <div className="month-actions">
+              <button className="calendar-arrow" type="button" aria-label="前月" onClick={() => changeCalendarMonth(-1)}>‹</button>
+              <button className="calendar-arrow" type="button" aria-label="次月" onClick={() => changeCalendarMonth(1)}>›</button>
+            </div>
+          </div>
+
+          <div className="calendar-weekdays">
+            {['日', '月', '火', '水', '木', '金', '土'].map((day) => (
+              <span key={day}>{day}</span>
+            ))}
+          </div>
+
+          <div className="month-grid">
+            {Array.from({ length: calendarCellCount }, (_, index) => index - calendarStartOffset + 1).map((day, index) => {
+              if (day < 1 || day > calendarDaysInMonth) {
+                return <span key={`empty-${index}`} className="day-cell-empty" aria-hidden="true" />;
+              }
+
+              const date = new Date(calendarYear, calendarMonthIndex, day);
+              const isSelected = date.toDateString() === selectedCalendarDate.toDateString();
+              const hasSchedule = date.toDateString() === today.toDateString() && demoSchedule.length > 0;
+
+              return (
+                <button
+                  key={day}
+                  type="button"
+                  aria-label={`${day}日`}
+                  aria-pressed={isSelected}
+                  className={`day-cell ${isSelected ? 'selected' : ''} ${hasSchedule ? 'has-dot' : ''}`}
+                  onClick={() => setSelectedCalendarDate(date)}
+                >
+                  {day}
+                </button>
+              );
+            })}
+          </div>
+        </section>
+
+        <aside className="panel page-panel">
+          <div className="panel-header compact-header">
+            <div className="panel-title-wrap">
+              <span className="icon-badge icon-teal"><Clock3 size={16} /></span>
+              <div>
+                <h2>{selectedCalendarDateLabel}</h2>
+                <small>選択した日の予定</small>
+              </div>
+            </div>
+            <span className="tiny-badge">{selectedDaySchedule.length}件</span>
+          </div>
+
+          <div className="agenda-list">
+            {selectedDaySchedule.map((item) => (
+              <div key={item.time} className="agenda-row">
+                <time>{item.time}</time>
+                <span className={`agenda-bar ${item.tone}`} />
+                <div>
+                  <strong>{item.title}</strong>
+                  <small>{item.detail}</small>
+                </div>
+                <button
+                  type="button"
+                  className="button button-small"
+                  onClick={() => navigate(item.isCourse ? 'subject' : item.tone === 'project' ? 'projects' : 'work')}
+                >
+                  開く
+                </button>
+              </div>
+            ))}
+            {selectedDaySchedule.length === 0 && (
+              <p className="calendar-empty-state">この日の予定はありません。</p>
+            )}
+          </div>
+        </aside>
+      </div>
+    </section>
+  );
+
+  const renderSchool = () => (
+    <section className="page">
+      <div className="page-header">
+        <div>
+          <p className="eyebrow">SCHOOL</p>
+          <h1>学校の入口</h1>
+        </div>
+        <button className="button button-primary button-small" type="button" onClick={() => navigate('subject')}>
+          科目を見る
+        </button>
+      </div>
+
+      <div className="school-layout">
+        <section className="panel page-panel">
+          <div className="panel-header">
+            <div className="panel-title-wrap">
+              <span className="icon-badge icon-blue"><BookOpen size={16} /></span>
+              <div>
+                <h2>今週の時間割</h2>
+                <small>{weekRangeLabel} ・ 月〜金</small>
+              </div>
+            </div>
+          </div>
+
+          <div className="timetable-scroll" role="region" aria-label="今週の時間割" tabIndex={0}>
+          <div className="timetable">
+            <div className="timetable-head">時限</div>
+            <div className={`timetable-head ${today.getDay() === 1 ? 'is-today' : ''}`}>月</div>
+            <div className={`timetable-head ${today.getDay() === 2 ? 'is-today' : ''}`}>火</div>
+            <div className={`timetable-head ${today.getDay() === 3 ? 'is-today' : ''}`}>水</div>
+            <div className={`timetable-head ${today.getDay() === 4 ? 'is-today' : ''}`}>木</div>
+            <div className={`timetable-head ${today.getDay() === 5 ? 'is-today' : ''}`}>金</div>
+
+            <div className="timetable-cell period">1<br />09:10</div>
+            <div className="timetable-cell"><button type="button" className="class-pill" onClick={() => navigate('subject')}>Webアプリ開発<small>対面 ・ 302教室</small></button></div>
+            <div className="timetable-cell" />
+            <div className="timetable-cell"><button type="button" className="class-pill" onClick={() => navigate('subject')}>データベース<small>オンライン ・ Zoom</small></button></div>
+            <div className="timetable-cell" />
+            <div className="timetable-cell" />
+
+            <div className="timetable-cell period">2<br />10:50</div>
+            <div className="timetable-cell" />
+            <div className="timetable-cell"><button type="button" className="class-pill" onClick={() => navigate('subject')}>グループ開発<small>オンライン ・ Zoom</small></button></div>
+            <div className="timetable-cell" />
+            <div className="timetable-cell"><button type="button" className="class-pill" onClick={() => navigate('subject')}>プログラミング<small>対面</small></button></div>
+            <div className="timetable-cell" />
+
+            <div className="timetable-cell period">3<br />13:10</div>
+            <div className="timetable-cell"><button type="button" className="class-pill" onClick={() => navigate('subject')}>データベース<small>対面</small></button></div>
+            <div className="timetable-cell" />
+            <div className="timetable-cell" />
+            <div className="timetable-cell" />
+            <div className="timetable-cell"><button type="button" className="class-pill" onClick={() => navigate('subject')}>Webアプリ開発<small>対面</small></button></div>
+
+            <div className="timetable-cell period">4限</div>
+            <div className="timetable-cell" />
+            <div className="timetable-cell" />
+            <div className="timetable-cell" />
+            <div className="timetable-cell" />
+            <div className="timetable-cell" />
+
+            <div className="timetable-cell period">5限</div>
+            <div className="timetable-cell" />
+            <div className="timetable-cell" />
+            <div className="timetable-cell" />
+            <div className="timetable-cell" />
+            <div className="timetable-cell" />
+          </div>
+          </div>
+        </section>
+
+        <aside className="panel page-panel">
+          <div className="panel-header compact-header">
+            <div className="panel-title-wrap">
+              <span className="icon-badge icon-violet"><NotebookPen size={16} /></span>
+              <div>
+                <h2>関連情報</h2>
+                <small>授業と課題</small>
+              </div>
+            </div>
+          </div>
+
+          <div className="info-stack">
+            <div className="info-row">
+              <span>今日の授業</span>
+              <strong>09:10 Webアプリ開発</strong>
+            </div>
+            <div className="info-row">
+              <span>次の課題</span>
+              <strong>DB課題提出</strong>
+            </div>
+            <div className="info-row">
+              <span>次のテスト</span>
+              <strong>10/15 データベース</strong>
+            </div>
+          </div>
+        </aside>
+      </div>
+    </section>
+  );
+
+  const renderSubject = () => (
+    <section className="page">
+      <div className="page-header">
+        <div>
+          <p className="eyebrow">SUBJECT</p>
+          <h1>Webアプリ開発</h1>
+        </div>
+        <div className="button-row">
+          <a className="button button-primary" href="https://zoom.us/" target="_blank" rel="noreferrer">Zoomを開く</a>
+          <a className="button" href="https://classroom.google.com/" target="_blank" rel="noreferrer">資料を見る</a>
+        </div>
+      </div>
+
+      <div className="subject-meta-grid">
+        <div className="meta-pill"><span>授業形式</span><strong>対面</strong></div>
+        <div className="meta-pill"><span>時間</span><strong>09:10 - 10:40</strong></div>
+        <div className="meta-pill"><span>教室</span><strong>302教室</strong></div>
+        <div className="meta-pill"><span>出席</span><strong>12 / 14</strong></div>
+      </div>
+
+      <div className="tab-row">
+        {lessonTabs.map((tab) => (
+          <button
+            key={tab.id}
+            type="button"
+            className={`tab-button ${activeLessonTab === tab.id ? 'is-active' : ''}`}
+            onClick={() => setActiveLessonTab(tab.id)}
+          >
+            {tab.label}
+          </button>
+        ))}
+      </div>
+
+      <div className="subject-layout">
+        <section className="panel page-panel">
+          <div className="panel-header compact-header">
+            <div className="panel-title-wrap">
+              <span className="icon-badge icon-blue"><NotebookPen size={16} /></span>
+              <div>
+                <h2>{lesson.heading}</h2>
+                <small>{lesson.date}</small>
+              </div>
+            </div>
+          </div>
+
+          <div className="note-box">
+            <ul className="note-list">
+              {lesson.items.map((item) => (
+                <li key={item}>{item}</li>
+              ))}
+            </ul>
+          </div>
+
+          <div className="info-stack small-stack">
+            <div className="info-row">
+              <span>前回</span>
+              <strong>Reactのコンポーネント設計</strong>
+            </div>
+            <div className="info-row">
+              <span>今回</span>
+              <strong>{lesson.heading}</strong>
+            </div>
+            <div className="info-row">
+              <span>次回</span>
+              <strong>Firebaseとの連携</strong>
+            </div>
+          </div>
+
+          <div className="subject-next-task">
+            <div>
+              <strong>次回までにやること</strong>
+              <span>{subjectFollowUpTask.title}</span>
+              <small>期限 {subjectFollowUpTask.deadline}</small>
+            </div>
+            <button
+              type="button"
+              className={`button button-small ${subjectTaskAdded ? '' : 'button-primary'}`}
+              onClick={addSubjectFollowUpTask}
+              disabled={subjectTaskAdded}
+            >
+              {subjectTaskAdded ? 'Tasksに追加済み' : 'Taskに追加'}
+            </button>
+          </div>
+        </section>
+
+        <aside className="stacked-side">
+          <section className="panel mini-panel">
+            <div className="panel-header compact-header">
+              <div className="panel-title-wrap">
+                <span className="icon-badge icon-violet"><ListTodo size={16} /></span>
+                <div>
+                  <h2>関連課題</h2>
+                  <small>提出物</small>
+                </div>
+              </div>
+            </div>
+            {tasks.filter((task) => task.context.includes('Webアプリ開発')).map((task) => (
+              <div key={task.id} className="relationship-card">
+                <strong>{task.title}</strong>
+                <span>期限 {task.deadline}</span>
+              </div>
+            ))}
+            <button type="button" className="inline-link" onClick={() => navigate('tasks')}>
+              Tasks一覧を見る <ChevronRight size={12} />
+            </button>
+          </section>
+
+          <section className="panel mini-panel">
+            <div className="panel-header compact-header">
+              <div className="panel-title-wrap">
+                <span className="icon-badge icon-amber"><BookOpen size={16} /></span>
+                <div>
+                  <h2>関連テスト</h2>
+                  <small>確認事項</small>
+                </div>
+              </div>
+            </div>
+            <div className="relationship-card">
+              <strong>データベース確認</strong>
+              <span>10/15</span>
+            </div>
+            <div className="relationship-card">
+              <strong>JavaScript基礎</strong>
+              <span>10/20</span>
+            </div>
+          </section>
+        </aside>
+      </div>
+    </section>
+  );
+
+  const renderTasks = () => (
+    <section className="page">
+      <div className="page-header">
+        <div>
+          <p className="eyebrow">TASKS</p>
+          <h1>やることを整理する</h1>
+        </div>
+      </div>
+
+      <div className="task-layout">
+        <section className="panel page-panel">
+          <div className="panel-header task-panel-header">
+            <div className="panel-title-wrap">
+              <span className="icon-badge icon-violet"><ListTodo size={16} /></span>
+              <div>
+                <h2>タスク一覧</h2>
+                <small>期限と関連先で整理</small>
+              </div>
+            </div>
+            <div className="task-filter-row" role="group" aria-label="タスクの表示">
+              <button type="button" className={`task-filter ${taskFilter === 'all' ? 'is-active' : ''}`} aria-pressed={taskFilter === 'all'} onClick={() => setTaskFilter('all')}>
+                すべて {tasks.length}
+              </button>
+              <button type="button" className={`task-filter ${taskFilter === 'open' ? 'is-active' : ''}`} aria-pressed={taskFilter === 'open'} onClick={() => setTaskFilter('open')}>
+                未完了 {tasks.length - completedTaskCount}
+              </button>
+              <button type="button" className={`task-filter ${taskFilter === 'done' ? 'is-active' : ''}`} aria-pressed={taskFilter === 'done'} onClick={() => setTaskFilter('done')}>
+                完了 {completedTaskCount}
+              </button>
+            </div>
+          </div>
+
+          <div className="task-list">
+            {visibleTasks.map((task) => (
+              <label key={task.id} className={`task-item ${completedTaskIds.includes(task.id) ? 'is-complete' : ''}`}>
+                <input type="checkbox" checked={completedTaskIds.includes(task.id)} onChange={() => toggleTask(task.id)} />
+                <div className="task-copy">
+                  <strong>{task.title}</strong>
+                  <span>{task.context}</span>
+                </div>
+                <span className="due-pill">{task.deadline}</span>
+              </label>
+            ))}
+            {visibleTasks.length === 0 && <p className="calendar-empty-state">この状態のタスクはありません。</p>}
+          </div>
+        </section>
+
+        <aside className="panel page-panel">
+          <div className="panel-header compact-header">
+            <div className="panel-title-wrap">
+              <span className="icon-badge icon-blue"><CalendarDays size={16} /></span>
+              <div>
+                <h2>予定との違い</h2>
+                <small>区別して確認</small>
+              </div>
+            </div>
+          </div>
+
+          <div className="info-stack">
+            <div className="info-row">
+              <span>予定</span>
+              <strong>その時間に発生するもの</strong>
+            </div>
+            <div className="info-row">
+              <span>タスク</span>
+              <strong>自分が完了する必要があるもの</strong>
+            </div>
+          </div>
+        </aside>
+      </div>
+    </section>
+  );
+
+  const renderProjects = () => (
+    <section className="page">
+      <div className="page-header">
+        <div>
+          <p className="eyebrow">PROJECTS</p>
+          <h1>プロジェクトを確認する</h1>
+        </div>
+      </div>
+
+      <div className="project-grid">
+        {demoProjects.map((project) => (
+          <article key={project.name} className="panel page-panel project-card">
+            <div className="panel-header compact-header">
+              <div className="panel-title-wrap">
+                <span className="icon-badge icon-blue"><FolderKanban size={16} /></span>
+                <div>
+                  <h2>{project.name}</h2>
+                  <small>{project.status}</small>
+                </div>
+              </div>
+              <span className="tiny-badge">{project.completedStages}/{project.stages.length}工程</span>
+            </div>
+
+            <div className="project-stage-summary">
+              <span>現在の工程</span>
+              <strong>{project.stages[project.completedStages]}</strong>
+            </div>
+
+            <ol className="project-stage-list">
+              {project.stages.map((stage, index) => {
+                const isComplete = index < project.completedStages;
+                const isCurrent = index === project.completedStages;
+                return (
+                  <li key={stage} className={`project-stage ${isComplete ? 'is-complete' : ''} ${isCurrent ? 'is-current' : ''}`}>
+                    <span className="project-stage-marker">{isComplete ? '✓' : index + 1}</span>
+                    <span>{stage}</span>
+                    <small>{isComplete ? '完了' : isCurrent ? '進行中' : '未着手'}</small>
+                  </li>
+                );
+              })}
+            </ol>
+
+            <div className="project-next-step">
+              <span>次にやること</span>
+              <strong>{project.nextAction}</strong>
+            </div>
+
+            <div className="project-card-meta">
+              <span>期限</span>
+              <strong>{project.deadline}</strong>
+              <button type="button" className="inline-link" onClick={() => navigate('tasks')}>
+                関連Taskを見る <ChevronRight size={12} />
+              </button>
+            </div>
+
+            <details className="project-history">
+              <summary>最近の進捗記録 {project.history.length}件</summary>
+              <ul>
+                {project.history.map((entry) => <li key={entry}>{entry}</li>)}
+              </ul>
+            </details>
+
+            {project.name === 'グループ開発' && (
+              <details className="project-ai-proposal">
+                <summary>AIの進捗整理案を見る <span>画面イメージ</span></summary>
+                <p>設計確認を進めている段階と整理しました。内容を確認してからProjectの進捗に反映します。</p>
+              </details>
+            )}
+          </article>
+        ))}
+      </div>
+    </section>
+  );
+
+  const renderWork = () => (
+    <section className="page">
+      <div className="page-header">
+        <div>
+          <p className="eyebrow">WORK</p>
+          <h1>バイトの予定を確認する</h1>
+        </div>
+      </div>
+
+      <div className="work-layout">
+        <section className="panel page-panel">
+          <div className="panel-header compact-header">
+            <div className="panel-title-wrap">
+              <span className="icon-badge icon-teal"><BriefcaseBusiness size={16} /></span>
+              <div>
+                <h2>今週のシフト</h2>
+                <small>マック ・ 時給 ¥{hourlyRate.toLocaleString('ja-JP')}</small>
+              </div>
+            </div>
+            <span className="tiny-badge">{demoShifts.length}件</span>
+          </div>
+
+          <div className="agenda-list">
+            {demoShifts.map((shift) => {
+              const workMinutes = getShiftWorkMinutes(shift);
+              const shiftPay = Math.round((workMinutes * hourlyRate) / 60);
+              return (
+                <div key={`${shift.day}-${shift.start}`} className="agenda-row">
+                  <time>{shift.day}</time>
+                  <span className="agenda-bar work" />
+                  <div>
+                    <strong>{shift.start} - {shift.end}</strong>
+                    <small>{shift.breakMinutes === 0 ? '休憩なし' : `休憩 ${shift.breakMinutes}分`}</small>
+                  </div>
+                  <span className="shift-result">
+                    <small>実働 {workMinutes / 60}h</small>
+                    <strong>¥{shiftPay.toLocaleString('ja-JP')}</strong>
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+        </section>
+
+        <aside className="panel page-panel">
+          <div className="panel-header compact-header">
+            <div className="panel-title-wrap">
+              <span className="icon-badge icon-violet"><Wallet size={16} /></span>
+              <div>
+                <h2>今週の給与見込み</h2>
+                <small>実働 × 時給</small>
+              </div>
+            </div>
+          </div>
+          <div className="info-stack">
+            <div className="info-row">
+              <span>時給</span>
+              <strong>¥{hourlyRate.toLocaleString('ja-JP')}</strong>
+            </div>
+            <div className="info-row">
+              <span>休憩後の実働</span>
+              <strong>{plannedWorkMinutes / 60}時間</strong>
+            </div>
+            <div className="info-row">
+              <span>予定給与</span>
+              <strong>¥{plannedWorkPay.toLocaleString('ja-JP')}</strong>
+            </div>
+          </div>
+          <button type="button" className="inline-link" onClick={() => navigate('finance')}>
+            Financeを見る <ChevronRight size={12} />
+          </button>
+        </aside>
+      </div>
+    </section>
+  );
+
+  const renderFinance = () => (
+    <section className="page">
+      <div className="page-header">
+        <div>
+          <p className="eyebrow">FINANCE</p>
+          <h1>収支を確認する</h1>
+        </div>
+        {!isExpenseFormOpen && (
+          <button className="button button-primary button-small" type="button" onClick={() => setIsExpenseFormOpen(true)}>
+            <Plus size={14} /> 支出を追加
+          </button>
+        )}
+      </div>
+
+      {isExpenseFormOpen && (
+        <form className="panel finance-entry-form" onSubmit={submitExpense}>
+          <div className="panel-header compact-header">
+            <div>
+              <h2>支出を記録</h2>
+              <small>登録内容はこのプレビュー内だけに反映されます</small>
+            </div>
+          </div>
+
+          <div className="finance-entry-fields">
+            <label className="finance-field">
+              内容
+              <input
+                type="text"
+                required
+                value={expenseName}
+                onChange={(event) => {
+                  setExpenseName(event.target.value);
+                  setExpenseCategory(suggestExpenseCategory(event.target.value));
+                }}
+                placeholder="例: 自販機"
+              />
+            </label>
+            <label className="finance-field">
+              金額
+              <input
+                type="number"
+                min="1"
+                step="1"
+                required
+                value={expenseAmount}
+                onChange={(event) => setExpenseAmount(event.target.value)}
+                placeholder="150"
+              />
+            </label>
+            <label className="finance-field">
+              カテゴリ
+              <select value={expenseCategory} onChange={(event) => setExpenseCategory(event.target.value)}>
+                {financeCategories.map((category) => <option key={category}>{category}</option>)}
+              </select>
+              <small>入力からの候補: {suggestExpenseCategory(expenseName)}</small>
+            </label>
+          </div>
+
+          <div className="finance-form-actions">
+            <span>日付: {formatToday(today)}</span>
+            <div>
+              <button className="button button-small" type="button" onClick={() => setIsExpenseFormOpen(false)}>キャンセル</button>
+              <button className="button button-primary button-small" type="submit">登録</button>
+            </div>
+          </div>
+        </form>
+      )}
+
+      <div className="finance-layout">
+        <section className="panel page-panel">
+          <div className="panel-header compact-header">
+            <div className="panel-title-wrap">
+              <span className="icon-badge icon-violet"><Wallet size={16} /></span>
+              <div>
+                <h2>今月の収支</h2>
+                <small>支出と残高</small>
+              </div>
+            </div>
+            <span className="tiny-badge">{today.getMonth() + 1}月</span>
+          </div>
+
+          <div className="rate-stack">
+            <div className="rate-row">
+              <span>収入</span>
+              <strong className="positive">¥{monthlyIncome.toLocaleString('ja-JP')}</strong>
+            </div>
+            <div className="rate-row">
+              <span>支出</span>
+              <strong className="negative">¥{monthlyExpenses.toLocaleString('ja-JP')}</strong>
+            </div>
+            <div className="rate-row tall-row">
+              <span>残高</span>
+              <strong>¥{monthlyBalance.toLocaleString('ja-JP')}</strong>
+            </div>
+            <div className="rate-row">
+              <span>Workの今週の給与見込み</span>
+              <strong>¥{plannedWorkPay.toLocaleString('ja-JP')} ・予定</strong>
+            </div>
+          </div>
+        </section>
+
+        <aside className="panel page-panel">
+          <div className="panel-header compact-header">
+            <div className="panel-title-wrap">
+              <span className="icon-badge icon-amber"><BookOpen size={16} /></span>
+              <div>
+                <h2>最近の支出</h2>
+                <small>今月の記録</small>
+              </div>
+            </div>
+          </div>
+
+          <div className="expense-list">
+            {expenses.map((expense) => (
+              <div key={expense.id} className="expense-row">
+                <div className="expense-detail">
+                  <span>{expense.name}</span>
+                  <small>{expense.date} ・ {expense.category}</small>
+                </div>
+                <strong>¥{expense.amount.toLocaleString('ja-JP')}</strong>
+              </div>
+            ))}
+          </div>
+        </aside>
+      </div>
+    </section>
+  );
+
+  const renderLinks = () => (
+    <section className="page">
+      <div className="page-header">
+        <div>
+          <p className="eyebrow">LINKS</p>
+          <h1>よく使うアプリ</h1>
+        </div>
+      </div>
+
+      <div className="links-grid">
+        {quickLinks.map((link) => (
+          <a key={link.name} href={link.href} target="_blank" rel="noreferrer" className="link-card">
+            <span className={`link-badge badge-${link.tone}`}>{link.mark}</span>
+            <strong>{link.name}</strong>
+            <small>{link.kind}</small>
+          </a>
+        ))}
+      </div>
+    </section>
+  );
+
+  const renderContent = () => {
+    switch (activeView) {
+      case 'calendar':
+        return renderCalendar();
+      case 'school':
+        return renderSchool();
+      case 'subject':
+        return renderSubject();
+      case 'tasks':
+        return renderTasks();
+      case 'projects':
+        return renderProjects();
+      case 'work':
+        return renderWork();
+      case 'finance':
+        return renderFinance();
+      case 'links':
+        return renderLinks();
+      case 'home':
+      default:
+        return renderHome();
+    }
+  };
+
+  return (
+    <div className="app-shell">
+      <aside className="sidebar" aria-label="メインメニュー">
+        <div className="brand">
+          <span className="brand-mark"><House size={18} /></span>
+          <div>
+            <span className="brand-name">Life OS</span>
+            <span className="brand-caption">統合版 ・ UI試作</span>
+          </div>
+        </div>
+
+        <p className="nav-label">PERSONAL WORKSPACE</p>
+        <nav className="nav-list" aria-label="ナビゲーション">
+          {navItems.map((item) => {
+            const Icon = item.icon;
+            return (
+              <button key={item.id} type="button" className={`nav-item ${activeView === item.id ? 'is-active' : ''}`} onClick={() => navigate(item.id)}>
+                <Icon size={15} />
+                <span>{item.label}</span>
+              </button>
+            );
+          })}
+        </nav>
+
+        <div className="sidebar-note">
+          <span className="sidebar-note-icon"><CheckCircle2 size={15} /></span>
+          <p>今日の状況から、必要な情報へ。</p>
+        </div>
+
+        <div className="profile-row">
+          <span className="profile-avatar">太</span>
+          <div className="profile-copy">
+            <strong>太郎さん</strong>
+            <small>学生</small>
+          </div>
+          <button className="profile-help" type="button" aria-label="ヘルプ">
+            <CheckCircle2 size={15} />
+          </button>
+        </div>
+      </aside>
+
+      <div className="main-area">
+        {renderTopBar(activeView === 'home' ? 'ホーム' : navItems.find((item) => item.id === activeView)?.label ?? 'ホーム')}
+        <main className="content-area">{renderContent()}</main>
+      </div>
+    </div>
+  );
+}
+
+export default App;
+
+
