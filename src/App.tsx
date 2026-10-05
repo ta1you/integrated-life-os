@@ -13,6 +13,7 @@ import {
   House,
   Link2,
   ListTodo,
+  Menu,
   NotebookPen,
   Plus,
   Wallet,
@@ -20,6 +21,14 @@ import {
 import { demoSchedule, demoTasks, lessonNotes, quickLinks, type LessonSection } from './data';
 
 type View = 'home' | 'calendar' | 'school' | 'subject' | 'tasks' | 'projects' | 'work' | 'finance' | 'links';
+type HomeShortcut = {
+  name: string;
+  kind: string;
+  mark: string;
+  href: string;
+  tone: string;
+  route?: View;
+};
 
 const navItems = [
   { id: 'home', label: 'ホーム', icon: House },
@@ -32,6 +41,21 @@ const navItems = [
   { id: 'finance', label: '収支', icon: Wallet },
   { id: 'links', label: 'リンク', icon: Link2 },
 ] as const;
+
+const shortcutToneByCategory = {
+  '学校': 'blue',
+  'オンライン': 'violet',
+  'バイト': 'amber',
+  '開発': 'slate',
+  'その他': 'green',
+} as const;
+
+const homeShortcutDefaults: HomeShortcut[] = [
+  ...quickLinks
+    .filter((link) => ['Teams', 'Classroom', 'Zoom', 'GitHub', 'Gmail'].includes(link.name))
+    .map((link) => ({ ...link, name: link.name === 'Classroom' ? 'Google Classroom' : link.name })),
+  { name: 'バイト', kind: 'シフト確認', mark: 'B', href: '#work', tone: 'coral', route: 'work' },
+];
 
 const lessonTabs: { id: LessonSection; label: string }[] = [
   { id: 'previous', label: '前回' },
@@ -146,6 +170,7 @@ function greetingForHour(hour: number) {
 }
 
 function App() {
+  const [today, setToday] = useState(() => new Date());
   const [activeView, setActiveView] = useState<View>(() => {
     const hash = window.location.hash.replace('#', '');
     return navItems.some((item) => item.id === hash) ? (hash as View) : 'home';
@@ -164,10 +189,21 @@ function App() {
   const [expenseName, setExpenseName] = useState('');
   const [expenseAmount, setExpenseAmount] = useState('');
   const [expenseCategory, setExpenseCategory] = useState('その他');
+  const [homeShortcuts, setHomeShortcuts] = useState<HomeShortcut[]>(homeShortcutDefaults);
+  const [isShortcutFormOpen, setIsShortcutFormOpen] = useState(false);
+  const [shortcutName, setShortcutName] = useState('');
+  const [shortcutUrl, setShortcutUrl] = useState('');
+  const [shortcutMark, setShortcutMark] = useState('');
+  const [shortcutCategory, setShortcutCategory] = useState<keyof typeof shortcutToneByCategory>('その他');
+  const [isMobileMoreOpen, setIsMobileMoreOpen] = useState(false);
   const [freeNote, setFreeNote] = useState(() => window.localStorage.getItem('unified-life-os-demo-note') ?? '');
   const [noteSaved, setNoteSaved] = useState(false);
 
-  const today = new Date();
+  const currentMinutes = today.getHours() * 60 + today.getMinutes();
+  const nextHomeSchedule = demoSchedule.find((item) => {
+    const [hours, minutes] = item.time.split(':').map(Number);
+    return hours * 60 + minutes >= currentMinutes;
+  });
   const tasks = subjectTaskAdded ? [subjectFollowUpTask, ...demoTasks] : demoTasks;
   const nearestTaskDeadline = tasks
     .filter((task) => !completedTaskIds.includes(task.id))
@@ -228,6 +264,11 @@ function App() {
   }, []);
 
   useEffect(() => {
+    const timer = window.setInterval(() => setToday(new Date()), 60_000);
+    return () => window.clearInterval(timer);
+  }, []);
+
+  useEffect(() => {
     if (typeof window === 'undefined') return;
     window.localStorage.setItem('unified-life-os-demo-note', freeNote);
     setNoteSaved(true);
@@ -236,6 +277,7 @@ function App() {
   }, [freeNote]);
 
   const navigate = (view: View) => {
+    setIsMobileMoreOpen(false);
     setActiveView(view);
     window.history.pushState({}, '', `#${view}`);
     window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -248,6 +290,36 @@ function App() {
   };
 
   const addSubjectFollowUpTask = () => setSubjectTaskAdded(true);
+
+  const addHomeShortcut = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const name = shortcutName.trim();
+    if (!name || !shortcutUrl.trim()) return;
+
+    let parsedUrl: URL;
+    try {
+      parsedUrl = new URL(shortcutUrl.trim());
+    } catch {
+      return;
+    }
+    if (parsedUrl.protocol !== 'http:' && parsedUrl.protocol !== 'https:') return;
+
+    setHomeShortcuts((current) => [
+      ...current,
+      {
+        name,
+        kind: shortcutCategory,
+        mark: shortcutMark.trim() || name.replace(/\s/g, '').slice(0, 2),
+        href: parsedUrl.href,
+        tone: shortcutToneByCategory[shortcutCategory],
+      },
+    ]);
+    setShortcutName('');
+    setShortcutUrl('');
+    setShortcutMark('');
+    setShortcutCategory('その他');
+    setIsShortcutFormOpen(false);
+  };
 
   const submitExpense = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -290,7 +362,7 @@ function App() {
   );
 
   const renderHome = () => (
-    <section className="page">
+    <section className="page home-page">
       <div className="page-header">
         <div>
           <p className="eyebrow">TODAY</p>
@@ -301,6 +373,24 @@ function App() {
           {greetingForHour(today.getHours())}
         </div>
       </div>
+
+      <section className={`panel next-event-panel ${nextHomeSchedule ? 'has-upcoming' : 'is-finished'}`}>
+        {nextHomeSchedule && <div className="next-event-time">{nextHomeSchedule.time}</div>}
+        <div className="next-event-copy">
+          <span>{nextHomeSchedule ? '次の予定' : '今日の予定'}</span>
+          <h2>{nextHomeSchedule?.title ?? '今日の予定は終了しました'}</h2>
+          <p>{nextHomeSchedule?.detail ?? 'おつかれさまでした'}</p>
+        </div>
+        {nextHomeSchedule && (
+          <button
+            className="button button-primary button-small"
+            type="button"
+            onClick={() => navigate(nextHomeSchedule.isCourse ? 'subject' : nextHomeSchedule.tone === 'project' ? 'projects' : 'work')}
+          >
+            詳細を見る <ChevronRight size={13} />
+          </button>
+        )}
+      </section>
 
       <div className="home-grid">
         <section className="panel page-panel">
@@ -317,32 +407,32 @@ function App() {
             </button>
           </div>
 
-          <div className="schedule-list compact-list">
-            {demoSchedule.map((item) => (
-              <div key={item.time} className="schedule-item">
-                <time className="schedule-time">{item.time}</time>
-                <span className={`schedule-bar ${item.tone}`} />
-                <div className="schedule-copy">
-                  <button
-                    type="button"
-                    className="schedule-title"
-                    onClick={() => navigate(item.isCourse ? 'subject' : item.tone === 'project' ? 'projects' : 'work')}
-                  >
-                    {item.title}
-                  </button>
-                  <p>{item.detail}</p>
+          <details className="home-schedule-details">
+            <summary>
+              <span>今日の予定を展開</span>
+              <span>{demoSchedule.length}件 <ChevronRight size={14} /></span>
+            </summary>
+            <div className="schedule-list compact-list">
+              {demoSchedule.map((item) => (
+                <div key={item.time} className="schedule-item">
+                  <time className="schedule-time">{item.time}</time>
+                  <span className={`schedule-bar ${item.tone}`} />
+                  <div className="schedule-copy">
+                    <button
+                      type="button"
+                      className="schedule-title"
+                      onClick={() => navigate(item.isCourse ? 'subject' : item.tone === 'project' ? 'projects' : 'work')}
+                    >
+                      {item.title}
+                    </button>
+                    <p>{item.detail}</p>
+                  </div>
+                  <span className="schedule-tag">{scheduleToneLabel[item.tone]}</span>
                 </div>
-                <span className="schedule-tag">{scheduleToneLabel[item.tone]}</span>
-              </div>
-            ))}
-          </div>
+              ))}
+            </div>
+          </details>
 
-          <div className="inline-action-row">
-            <span>時間や場所などの詳細は、予定の関連画面で確認できます。</span>
-            <button className="button button-primary button-small" type="button" onClick={() => navigate('calendar')}>
-              今日の予定を見る
-            </button>
-          </div>
         </section>
 
         <aside className="stacked-side">
@@ -371,6 +461,9 @@ function App() {
               <span>近い期限</span>
               <strong>{nearestTaskDeadline}</strong>
             </div>
+            <button type="button" className="inline-link" onClick={() => navigate('tasks')}>
+              すべて見る <ChevronRight size={12} />
+            </button>
           </section>
 
           <section className="panel mini-panel">
@@ -385,10 +478,10 @@ function App() {
             </div>
             <div className="project-box">
               <div className="project-headline">
-                <strong>グループ開発</strong>
-                <span>設計確認</span>
+                <strong>ポータルサイト開発</strong>
+                <span>③ 画面設計</span>
               </div>
-              <p>次にやること: 資料の確認と共有</p>
+              <p>進行中 ・ 次にやること: データ設計</p>
             </div>
             <button type="button" className="inline-link" onClick={() => navigate('projects')}>
               プロジェクトを開く <ChevronRight size={12} />
@@ -409,14 +502,53 @@ function App() {
         </div>
 
         <div className="quick-links-grid">
-          {quickLinks.map((link) => (
-            <a key={link.name} href={link.href} target="_blank" rel="noreferrer" className="quick-link-card">
-              <span className={`link-mark mark-${link.tone}`}>{link.mark}</span>
-              <span>{link.name}</span>
-              <ExternalLink size={12} />
-            </a>
+          {homeShortcuts.map((link) => (
+            link.route ? (
+              <button key={link.name} type="button" className="quick-link-card" onClick={() => navigate(link.route!)}>
+                <span className={`link-mark mark-${link.tone}`}>{link.mark}</span>
+                <span>{link.name}</span>
+                <ChevronRight size={12} />
+              </button>
+            ) : (
+              <a key={link.name} href={link.href} target="_blank" rel="noreferrer" className="quick-link-card">
+                <span className={`link-mark mark-${link.tone}`}>{link.mark}</span>
+                <span>{link.name}</span>
+                <ExternalLink size={12} />
+              </a>
+            )
           ))}
         </div>
+
+        {!isShortcutFormOpen ? (
+          <button type="button" className="button home-add-shortcut" onClick={() => setIsShortcutFormOpen(true)}>
+            <Plus size={14} /> よく使うものを追加
+          </button>
+        ) : (
+          <form className="home-shortcut-form" onSubmit={addHomeShortcut}>
+            <label>
+              名前
+              <input type="text" value={shortcutName} onChange={(event) => setShortcutName(event.target.value)} placeholder="例: バイト" required />
+            </label>
+            <label>
+              URL
+              <input type="url" value={shortcutUrl} onChange={(event) => setShortcutUrl(event.target.value)} placeholder="https://example.com" required />
+            </label>
+            <label>
+              アイコン文字
+              <input type="text" value={shortcutMark} onChange={(event) => setShortcutMark(event.target.value)} placeholder="名前から自動設定" maxLength={2} />
+            </label>
+            <label>
+              カテゴリ
+              <select value={shortcutCategory} onChange={(event) => setShortcutCategory(event.target.value as keyof typeof shortcutToneByCategory)}>
+                {Object.keys(shortcutToneByCategory).map((category) => <option key={category}>{category}</option>)}
+              </select>
+            </label>
+            <div className="home-shortcut-form-actions">
+              <button type="button" className="button button-small" onClick={() => setIsShortcutFormOpen(false)}>キャンセル</button>
+              <button type="submit" className="button button-primary button-small">追加する</button>
+            </div>
+          </form>
+        )}
       </section>
 
       <section className="panel full-width-panel note-panel">
@@ -1214,6 +1346,37 @@ function App() {
         {renderTopBar(activeView === 'home' ? 'ホーム' : navItems.find((item) => item.id === activeView)?.label ?? 'ホーム')}
         <main className="content-area">{renderContent()}</main>
       </div>
+
+      <div className={`mobile-more-menu ${isMobileMoreOpen ? 'is-open' : ''}`} id="mobile-more-menu" aria-hidden={!isMobileMoreOpen}>
+        {navItems.filter((item) => item.id !== 'home' && item.id !== 'calendar' && item.id !== 'tasks').map((item) => {
+          const Icon = item.icon;
+          return (
+            <button key={item.id} type="button" onClick={() => navigate(item.id)}>
+              <Icon size={16} /> {item.label}
+            </button>
+          );
+        })}
+      </div>
+      <nav className="mobile-bottom-nav" aria-label="モバイルナビゲーション">
+        <button type="button" className={activeView === 'home' ? 'is-active' : ''} onClick={() => navigate('home')}>
+          <House size={18} /><span>ホーム</span>
+        </button>
+        <button type="button" className={activeView === 'calendar' ? 'is-active' : ''} onClick={() => navigate('calendar')}>
+          <CalendarDays size={18} /><span>カレンダー</span>
+        </button>
+        <button type="button" className={activeView === 'tasks' ? 'is-active' : ''} onClick={() => navigate('tasks')}>
+          <ListTodo size={18} /><span>タスク</span>
+        </button>
+        <button
+          type="button"
+          className={isMobileMoreOpen || !['home', 'calendar', 'tasks'].includes(activeView) ? 'is-active' : ''}
+          aria-expanded={isMobileMoreOpen}
+          aria-controls="mobile-more-menu"
+          onClick={() => setIsMobileMoreOpen((open) => !open)}
+        >
+          <Menu size={18} /><span>その他</span>
+        </button>
+      </nav>
     </div>
   );
 }
