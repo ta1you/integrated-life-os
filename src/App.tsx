@@ -1,4 +1,4 @@
-﻿import { useEffect, useState, type FormEvent } from 'react';
+﻿import { Fragment, useEffect, useState, type FormEvent } from 'react';
 import {
   Bell,
   BookOpen,
@@ -15,12 +15,94 @@ import {
   ListTodo,
   Menu,
   NotebookPen,
+  Pencil,
   Plus,
+  Trash2,
   Wallet,
+  X,
 } from 'lucide-react';
-import { demoSchedule, demoTasks, lessonNotes, quickLinks, type LessonSection } from './data';
+import { demoTasks, lessonNotes, quickLinks, type LessonSection } from './data';
 
 type View = 'home' | 'calendar' | 'school' | 'subject' | 'tasks' | 'projects' | 'work' | 'finance' | 'links';
+type EventCategory = '学校' | 'バイト' | 'プライベート' | 'プロジェクト';
+type EventFormat = '対面' | 'オンライン' | 'オンデマンド' | 'その他';
+type LifeEvent = {
+  id: string;
+  date: string;
+  startTime: string;
+  endTime: string;
+  title: string;
+  category: EventCategory;
+  format: EventFormat;
+  location: string;
+};
+type EventDraft = Omit<LifeEvent, 'id'>;
+type EventDialogMode = 'form' | 'detail' | 'delete' | null;
+
+const eventStorageKey = 'integrated_life_os_events';
+const eventCategories: EventCategory[] = ['学校', 'バイト', 'プライベート', 'プロジェクト'];
+const eventFormats: EventFormat[] = ['対面', 'オンライン', 'オンデマンド', 'その他'];
+const eventCategoryTone: Record<EventCategory, string> = {
+  学校: 'school',
+  バイト: 'work',
+  プライベート: 'private',
+  プロジェクト: 'project',
+};
+const schoolPeriods = [
+  { period: 1, startTime: '09:10', endTime: '10:40' },
+  { period: 2, startTime: '10:50', endTime: '12:20' },
+  { period: 3, startTime: '13:10', endTime: '14:40' },
+  { period: 4, startTime: '14:50', endTime: '16:20' },
+  { period: 5, startTime: '16:30', endTime: '18:00' },
+];
+
+function toLocalDateKey(date: Date) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
+function createEmptyEventDraft(date: string): EventDraft {
+  return { date, startTime: '09:00', endTime: '10:00', title: '', category: '学校', format: '対面', location: '' };
+}
+
+function createSampleEvents(date = toLocalDateKey(new Date())): LifeEvent[] {
+  return [
+    { id: 'sample-web-app-class', date, startTime: '09:10', endTime: '10:40', title: 'Webアプリ開発', category: '学校', format: '対面', location: '302教室' },
+    { id: 'sample-group-project', date, startTime: '13:00', endTime: '14:30', title: 'グループ開発', category: 'プロジェクト', format: 'オンライン', location: 'Zoom' },
+    { id: 'sample-part-time-shift', date, startTime: '18:00', endTime: '22:00', title: 'バイト', category: 'バイト', format: '対面', location: 'マック' },
+  ];
+}
+
+function isStoredLifeEvent(value: unknown): value is LifeEvent {
+  if (typeof value !== 'object' || value === null) return false;
+  const event = value as Partial<LifeEvent>;
+  return typeof event.id === 'string'
+    && typeof event.date === 'string'
+    && /^\d{4}-\d{2}-\d{2}$/.test(event.date)
+    && typeof event.startTime === 'string'
+    && /^([01]\d|2[0-3]):[0-5]\d$/.test(event.startTime)
+    && typeof event.endTime === 'string'
+    && /^([01]\d|2[0-3]):[0-5]\d$/.test(event.endTime)
+    && event.endTime > event.startTime
+    && typeof event.title === 'string'
+    && eventCategories.includes(event.category as EventCategory)
+    && eventFormats.includes(event.format as EventFormat)
+    && typeof event.location === 'string';
+}
+
+function readStoredEvents(): LifeEvent[] {
+  try {
+    const storedEvents = window.localStorage.getItem(eventStorageKey);
+    if (storedEvents === null) return createSampleEvents();
+    const parsedEvents: unknown = JSON.parse(storedEvents);
+    return Array.isArray(parsedEvents) ? parsedEvents.filter(isStoredLifeEvent) : [];
+  } catch {
+    return createSampleEvents();
+  }
+}
+
 type HomeShortcut = {
   name: string;
   kind: string;
@@ -139,12 +221,6 @@ function getShiftWorkMinutes(shift: DemoShift) {
   return durationMinutes - shift.breakMinutes;
 }
 
-const scheduleToneLabel: Record<string, string> = {
-  school: '授業',
-  project: '開発',
-  work: '仕事',
-};
-
 function formatToday(date: Date) {
   return new Intl.DateTimeFormat('ja-JP', {
     month: 'long',
@@ -180,6 +256,13 @@ function App() {
     const now = new Date();
     return new Date(now.getFullYear(), now.getMonth(), 1);
   });
+  const [schoolWeekOffset, setSchoolWeekOffset] = useState(0);
+  const [events, setEvents] = useState<LifeEvent[]>(readStoredEvents);
+  const [eventDialogMode, setEventDialogMode] = useState<EventDialogMode>(null);
+  const [selectedEventId, setSelectedEventId] = useState<string | null>(null);
+  const [editingEventId, setEditingEventId] = useState<string | null>(null);
+  const [eventDraft, setEventDraft] = useState<EventDraft>(() => createEmptyEventDraft(toLocalDateKey(new Date())));
+  const [eventFormError, setEventFormError] = useState('');
   const [activeLessonTab, setActiveLessonTab] = useState<LessonSection>('previous');
   const [subjectTaskAdded, setSubjectTaskAdded] = useState(false);
   const [completedTaskIds, setCompletedTaskIds] = useState<string[]>([]);
@@ -199,32 +282,52 @@ function App() {
   const [freeNote, setFreeNote] = useState(() => window.localStorage.getItem('unified-life-os-demo-note') ?? '');
   const [noteSaved, setNoteSaved] = useState(false);
 
-  const currentMinutes = today.getHours() * 60 + today.getMinutes();
-  const nextHomeSchedule = demoSchedule.find((item) => {
-    const [hours, minutes] = item.time.split(':').map(Number);
-    return hours * 60 + minutes >= currentMinutes;
-  });
+  const currentTime = `${String(today.getHours()).padStart(2, '0')}:${String(today.getMinutes()).padStart(2, '0')}`;
+  const todayEvents = events
+    .filter((event) => event.date === toLocalDateKey(today))
+    .sort((first, second) => first.startTime.localeCompare(second.startTime));
+  const nextEvent = todayEvents.find((event) => event.startTime >= currentTime);
+  const nextHomeSchedule = nextEvent ? {
+    time: nextEvent.startTime,
+    title: nextEvent.title,
+    detail: [nextEvent.format, nextEvent.location].filter(Boolean).join(' ・ '),
+    isCourse: nextEvent.category === '学校',
+    tone: eventCategoryTone[nextEvent.category],
+    event: nextEvent,
+  } : undefined;
   const tasks = subjectTaskAdded ? [subjectFollowUpTask, ...demoTasks] : demoTasks;
   const nearestTaskDeadline = tasks
     .filter((task) => !completedTaskIds.includes(task.id))
     .sort((first, second) => getTaskDeadlineTime(first.deadline, today) - getTaskDeadlineTime(second.deadline, today))[0]?.deadline ?? '完了';
   const weekStart = new Date(today);
   weekStart.setDate(today.getDate() - ((today.getDay() + 6) % 7));
-  const weekEnd = new Date(weekStart);
-  weekEnd.setDate(weekStart.getDate() + 6);
-  const weekRangeLabel = `${new Intl.DateTimeFormat('ja-JP', { month: 'numeric', day: 'numeric' }).format(weekStart)}〜${new Intl.DateTimeFormat('ja-JP', { month: 'numeric', day: 'numeric' }).format(weekEnd)}`;
+  const schoolWeekStart = new Date(weekStart);
+  schoolWeekStart.setDate(weekStart.getDate() + schoolWeekOffset * 7);
+  const schoolWeekEnd = new Date(schoolWeekStart);
+  schoolWeekEnd.setDate(schoolWeekStart.getDate() + 6);
+  const weekRangeLabel = `${new Intl.DateTimeFormat('ja-JP', { month: 'numeric', day: 'numeric' }).format(schoolWeekStart)}〜${new Intl.DateTimeFormat('ja-JP', { month: 'numeric', day: 'numeric' }).format(schoolWeekEnd)}`;
+  const schoolWeekDays = ['月', '火', '水', '木', '金'].map((dayLabel, index) => {
+    const date = new Date(schoolWeekStart);
+    date.setDate(schoolWeekStart.getDate() + index);
+    return { dayLabel, date, dateKey: toLocalDateKey(date) };
+  });
+  const schoolWeekEvents = events
+    .filter((event) => event.category === '学校' && schoolWeekDays.some((day) => day.dateKey === event.date))
+    .sort((first, second) => first.date.localeCompare(second.date) || first.startTime.localeCompare(second.startTime));
   const calendarYear = visibleCalendarMonth.getFullYear();
   const calendarMonthIndex = visibleCalendarMonth.getMonth();
   const calendarDaysInMonth = new Date(calendarYear, calendarMonthIndex + 1, 0).getDate();
   const calendarStartOffset = new Date(calendarYear, calendarMonthIndex, 1).getDay();
   const calendarCellCount = Math.ceil((calendarStartOffset + calendarDaysInMonth) / 7) * 7;
-  const isSelectedDateToday = selectedCalendarDate.toDateString() === today.toDateString();
   const selectedCalendarDateLabel = new Intl.DateTimeFormat('ja-JP', {
     month: 'long',
     day: 'numeric',
     weekday: 'short',
   }).format(selectedCalendarDate);
-  const selectedDaySchedule = isSelectedDateToday ? demoSchedule : [];
+  const selectedDaySchedule = events
+    .filter((event) => event.date === toLocalDateKey(selectedCalendarDate))
+    .sort((first, second) => first.startTime.localeCompare(second.startTime));
+  const selectedEvent = events.find((event) => event.id === selectedEventId) ?? null;
   const completedTaskCount = tasks.filter((task) => completedTaskIds.includes(task.id)).length;
   const plannedWorkMinutes = demoShifts.reduce((total, shift) => total + getShiftWorkMinutes(shift), 0);
   const plannedWorkPay = Math.round((plannedWorkMinutes * hourlyRate) / 60);
@@ -237,6 +340,13 @@ function App() {
     return true;
   });
 
+  const getSchoolEventsForCell = (dateKey: string, periodNumber: number) => {
+    const period = schoolPeriods.find((item) => item.period === periodNumber);
+    if (!period) return [];
+    const nextPeriodStart = schoolPeriods.find((item) => item.period === periodNumber + 1)?.startTime ?? '23:59';
+    return schoolWeekEvents.filter((event) => event.date === dateKey && event.startTime >= period.startTime && event.startTime < nextPeriodStart);
+  };
+
   const changeCalendarMonth = (offset: number) => {
     const nextMonth = new Date(calendarYear, calendarMonthIndex + offset, 1);
     setVisibleCalendarMonth(nextMonth);
@@ -244,9 +354,93 @@ function App() {
   };
 
   const selectTodayInCalendar = () => {
-    const currentDate = new Date();
-    setVisibleCalendarMonth(new Date(currentDate.getFullYear(), currentDate.getMonth(), 1));
-    setSelectedCalendarDate(currentDate);
+    setVisibleCalendarMonth(new Date(today.getFullYear(), today.getMonth(), 1));
+    setSelectedCalendarDate(today);
+    setSelectedEventId(null);
+    setEventDialogMode(null);
+  };
+
+  const openCreateEvent = () => {
+    setEditingEventId(null);
+    setEventDraft(createEmptyEventDraft(toLocalDateKey(selectedCalendarDate)));
+    setEventFormError('');
+    setEventDialogMode('form');
+  };
+
+  const openSchoolCell = (date: Date, periodNumber: number) => {
+    const period = schoolPeriods.find((item) => item.period === periodNumber);
+    if (!period) return;
+    setVisibleCalendarMonth(new Date(date.getFullYear(), date.getMonth(), 1));
+    setSelectedCalendarDate(date);
+    setSelectedEventId(null);
+    setEditingEventId(null);
+    setEventDraft({
+      ...createEmptyEventDraft(toLocalDateKey(date)),
+      startTime: period.startTime,
+      endTime: period.endTime,
+      category: '学校',
+    });
+    setEventFormError('');
+    setEventDialogMode('form');
+    navigate('calendar');
+  };
+
+  const openEventDetails = (event: LifeEvent) => {
+    setSelectedEventId(event.id);
+    setEventDialogMode('detail');
+  };
+
+  const openEditEvent = (event: LifeEvent) => {
+    setEditingEventId(event.id);
+    setEventDraft({
+      date: event.date,
+      startTime: event.startTime,
+      endTime: event.endTime,
+      title: event.title,
+      category: event.category,
+      format: event.format,
+      location: event.location,
+    });
+    setEventFormError('');
+    setEventDialogMode('form');
+  };
+
+  const saveEvent = (formEvent: FormEvent<HTMLFormElement>) => {
+    formEvent.preventDefault();
+    if (eventDraft.endTime <= eventDraft.startTime) {
+      setEventFormError('終了時刻は開始時刻より後にしてください。');
+      return;
+    }
+
+    const trimmedTitle = eventDraft.title.trim();
+    if (!trimmedTitle) {
+      setEventFormError('予定名を入力してください。');
+      return;
+    }
+
+    const savedEvent: LifeEvent = {
+      ...eventDraft,
+      id: editingEventId ?? window.crypto?.randomUUID?.() ?? `event-${Date.now()}`,
+      title: trimmedTitle,
+      location: eventDraft.location.trim(),
+    };
+    setEvents((current) => editingEventId
+      ? current.map((event) => event.id === editingEventId ? savedEvent : event)
+      : [...current, savedEvent]);
+
+    const eventDate = new Date(`${savedEvent.date}T00:00:00`);
+    setVisibleCalendarMonth(new Date(eventDate.getFullYear(), eventDate.getMonth(), 1));
+    setSelectedCalendarDate(eventDate);
+    setSelectedEventId(savedEvent.id);
+    setEventFormError('');
+    setEventDialogMode('detail');
+  };
+
+  const deleteSelectedEvent = () => {
+    if (!selectedEventId) return;
+    setEvents((current) => current.filter((event) => event.id !== selectedEventId));
+    setSelectedEventId(null);
+    setEventDialogMode(null);
   };
 
   useEffect(() => {
@@ -269,6 +463,14 @@ function App() {
   }, []);
 
   useEffect(() => {
+    try {
+      window.localStorage.setItem(eventStorageKey, JSON.stringify(events));
+    } catch {
+      setEventFormError('予定を保存できませんでした。ブラウザの保存領域を確認してください。');
+    }
+  }, [events]);
+
+  useEffect(() => {
     if (typeof window === 'undefined') return;
     window.localStorage.setItem('unified-life-os-demo-note', freeNote);
     setNoteSaved(true);
@@ -281,6 +483,15 @@ function App() {
     setActiveView(view);
     window.history.pushState({}, '', `#${view}`);
     window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  const openEventInCalendar = (event: LifeEvent) => {
+    const eventDate = new Date(`${event.date}T00:00:00`);
+    setVisibleCalendarMonth(new Date(eventDate.getFullYear(), eventDate.getMonth(), 1));
+    setSelectedCalendarDate(eventDate);
+    setSelectedEventId(event.id);
+    setEventDialogMode('detail');
+    navigate('calendar');
   };
 
   const toggleTask = (taskId: string) => {
@@ -385,7 +596,7 @@ function App() {
           <button
             className="button button-primary button-small"
             type="button"
-            onClick={() => navigate(nextHomeSchedule.isCourse ? 'subject' : nextHomeSchedule.tone === 'project' ? 'projects' : 'work')}
+            onClick={() => openEventInCalendar(nextHomeSchedule.event)}
           >
             詳細を見る <ChevronRight size={13} />
           </button>
@@ -410,26 +621,27 @@ function App() {
           <details className="home-schedule-details">
             <summary>
               <span>今日の予定を展開</span>
-              <span>{demoSchedule.length}件 <ChevronRight size={14} /></span>
+              <span>{todayEvents.length}件 <ChevronRight size={14} /></span>
             </summary>
             <div className="schedule-list compact-list">
-              {demoSchedule.map((item) => (
-                <div key={item.time} className="schedule-item">
-                  <time className="schedule-time">{item.time}</time>
-                  <span className={`schedule-bar ${item.tone}`} />
+              {todayEvents.map((event) => (
+                <div key={event.id} className="schedule-item">
+                  <time className="schedule-time">{event.startTime}</time>
+                  <span className={`schedule-bar ${eventCategoryTone[event.category]}`} />
                   <div className="schedule-copy">
                     <button
                       type="button"
                       className="schedule-title"
-                      onClick={() => navigate(item.isCourse ? 'subject' : item.tone === 'project' ? 'projects' : 'work')}
+                      onClick={() => openEventInCalendar(event)}
                     >
-                      {item.title}
+                      {event.title}
                     </button>
-                    <p>{item.detail}</p>
+                    <p>{event.endTime}まで ・ {event.format}{event.location ? ` ・ ${event.location}` : ''}</p>
                   </div>
-                  <span className="schedule-tag">{scheduleToneLabel[item.tone]}</span>
+                  <span className="schedule-tag">{event.category}</span>
                 </div>
               ))}
+              {todayEvents.length === 0 && <p className="calendar-empty-state">今日は予定がありません。</p>}
             </div>
           </details>
 
@@ -581,9 +793,12 @@ function App() {
           <p className="eyebrow">CALENDAR</p>
           <h1>予定を確認する</h1>
         </div>
-        <button type="button" className="button button-primary button-small" onClick={selectTodayInCalendar}>
-          今日
-        </button>
+        <div className="button-row calendar-page-actions">
+          <button type="button" className="button button-small" onClick={selectTodayInCalendar}>今日</button>
+          <button type="button" className="button button-primary button-small" onClick={openCreateEvent}>
+            <Plus size={14} /> 予定を追加
+          </button>
+        </div>
       </div>
 
       <div className="calendar-layout">
@@ -603,9 +818,7 @@ function App() {
           </div>
 
           <div className="calendar-weekdays">
-            {['日', '月', '火', '水', '木', '金', '土'].map((day) => (
-              <span key={day}>{day}</span>
-            ))}
+            {['日', '月', '火', '水', '木', '金', '土'].map((day) => <span key={day}>{day}</span>)}
           </div>
 
           <div className="month-grid">
@@ -615,17 +828,23 @@ function App() {
               }
 
               const date = new Date(calendarYear, calendarMonthIndex, day);
-              const isSelected = date.toDateString() === selectedCalendarDate.toDateString();
-              const hasSchedule = date.toDateString() === today.toDateString() && demoSchedule.length > 0;
+              const dateKey = toLocalDateKey(date);
+              const isSelected = dateKey === toLocalDateKey(selectedCalendarDate);
+              const hasEvents = events.some((event) => event.date === dateKey);
+              const isToday = dateKey === toLocalDateKey(today);
 
               return (
                 <button
                   key={day}
                   type="button"
-                  aria-label={`${day}日`}
+                  aria-label={`${day}日${hasEvents ? ' 予定あり' : ''}`}
                   aria-pressed={isSelected}
-                  className={`day-cell ${isSelected ? 'selected' : ''} ${hasSchedule ? 'has-dot' : ''}`}
-                  onClick={() => setSelectedCalendarDate(date)}
+                  className={`day-cell ${isSelected ? 'selected' : ''} ${hasEvents ? 'has-dot' : ''} ${isToday ? 'is-today' : ''}`}
+                  onClick={() => {
+                    setSelectedCalendarDate(date);
+                    setSelectedEventId(null);
+                    setEventDialogMode(null);
+                  }}
                 >
                   {day}
                 </button>
@@ -647,29 +866,116 @@ function App() {
           </div>
 
           <div className="agenda-list">
-            {selectedDaySchedule.map((item) => (
-              <div key={item.time} className="agenda-row">
-                <time>{item.time}</time>
-                <span className={`agenda-bar ${item.tone}`} />
-                <div>
-                  <strong>{item.title}</strong>
-                  <small>{item.detail}</small>
-                </div>
-                <button
-                  type="button"
-                  className="button button-small"
-                  onClick={() => navigate(item.isCourse ? 'subject' : item.tone === 'project' ? 'projects' : 'work')}
-                >
-                  開く
+            {selectedDaySchedule.map((event) => (
+              <div key={event.id} className="agenda-row event-agenda-row">
+                <time>{event.startTime}</time>
+                <span className={`agenda-bar ${eventCategoryTone[event.category]}`} />
+                <button type="button" className="event-agenda-summary" onClick={() => openEventDetails(event)}>
+                  <strong>{event.title}</strong>
+                  <small>{event.endTime} ・ {event.category} ・ {event.format}{event.location ? ` ・ ${event.location}` : ''}</small>
                 </button>
+                <button type="button" className="button button-small" onClick={() => openEventDetails(event)}>詳細</button>
               </div>
             ))}
-            {selectedDaySchedule.length === 0 && (
-              <p className="calendar-empty-state">この日の予定はありません。</p>
-            )}
+            {selectedDaySchedule.length === 0 && <p className="calendar-empty-state">この日の予定はありません。</p>}
           </div>
         </aside>
       </div>
+
+      {eventDialogMode && (
+        <div className="event-dialog-backdrop">
+          <section className="event-dialog" role="dialog" aria-modal="true" aria-labelledby="event-dialog-title">
+            <button type="button" className="event-dialog-close" aria-label="閉じる" onClick={() => setEventDialogMode(null)}>
+              <X size={18} />
+            </button>
+
+            {eventDialogMode === 'form' && (
+              <form onSubmit={saveEvent}>
+                <header className="event-dialog-header">
+                  <p className="eyebrow">{editingEventId ? 'EDIT EVENT' : 'NEW EVENT'}</p>
+                  <h2 id="event-dialog-title">{editingEventId ? '予定を編集' : '予定を追加'}</h2>
+                </header>
+                <div className="event-form-grid">
+                  <label className="event-field event-field-date">
+                    日付
+                    <input type="date" required value={eventDraft.date} onChange={(change) => setEventDraft((current) => ({ ...current, date: change.target.value }))} />
+                  </label>
+                  <label className="event-field">
+                    開始
+                    <input type="time" required value={eventDraft.startTime} onChange={(change) => setEventDraft((current) => ({ ...current, startTime: change.target.value }))} />
+                  </label>
+                  <label className="event-field">
+                    終了
+                    <input type="time" required value={eventDraft.endTime} onChange={(change) => setEventDraft((current) => ({ ...current, endTime: change.target.value }))} />
+                  </label>
+                  <label className="event-field event-field-wide">
+                    予定名
+                    <input type="text" required maxLength={80} autoFocus value={eventDraft.title} onChange={(change) => setEventDraft((current) => ({ ...current, title: change.target.value }))} placeholder="例: Webアプリ開発" />
+                  </label>
+                  <label className="event-field">
+                    カテゴリ
+                    <select value={eventDraft.category} onChange={(change) => setEventDraft((current) => ({ ...current, category: change.target.value as EventCategory }))}>
+                      {eventCategories.map((category) => <option key={category}>{category}</option>)}
+                    </select>
+                  </label>
+                  <label className="event-field">
+                    形式
+                    <select value={eventDraft.format} onChange={(change) => setEventDraft((current) => ({ ...current, format: change.target.value as EventFormat }))}>
+                      {eventFormats.map((format) => <option key={format}>{format}</option>)}
+                    </select>
+                  </label>
+                  <label className="event-field event-field-wide">
+                    場所
+                    <input type="text" maxLength={100} value={eventDraft.location} onChange={(change) => setEventDraft((current) => ({ ...current, location: change.target.value }))} placeholder="教室・オンラインURL名など" />
+                  </label>
+                </div>
+                {eventFormError && <p className="event-form-error" role="alert">{eventFormError}</p>}
+                <div className="event-dialog-actions">
+                  <button type="button" className="button" onClick={() => setEventDialogMode(editingEventId ? 'detail' : null)}>キャンセル</button>
+                  <button type="submit" className="button button-primary">保存</button>
+                </div>
+              </form>
+            )}
+
+            {eventDialogMode === 'detail' && selectedEvent && (
+              <div>
+                <header className="event-dialog-header">
+                  <p className="eyebrow">EVENT DETAILS</p>
+                  <h2 id="event-dialog-title">{selectedEvent.title}</h2>
+                </header>
+                <dl className="event-detail-list">
+                  <div><dt>日時</dt><dd>{formatToday(new Date(`${selectedEvent.date}T00:00:00`))} ・ {selectedEvent.startTime}〜{selectedEvent.endTime}</dd></div>
+                  <div><dt>カテゴリ</dt><dd>{selectedEvent.category}</dd></div>
+                  <div><dt>形式</dt><dd>{selectedEvent.format}</dd></div>
+                  <div><dt>場所</dt><dd>{selectedEvent.location || '未設定'}</dd></div>
+                </dl>
+                <div className="event-dialog-actions event-detail-actions">
+                  <button type="button" className="button button-danger" onClick={() => setEventDialogMode('delete')}>
+                    <Trash2 size={15} /> 削除
+                  </button>
+                  <button type="button" className="button button-primary" onClick={() => openEditEvent(selectedEvent)}>
+                    <Pencil size={15} /> 編集
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {eventDialogMode === 'delete' && selectedEvent && (
+              <div>
+                <header className="event-dialog-header">
+                  <p className="eyebrow">DELETE EVENT</p>
+                  <h2 id="event-dialog-title">予定を削除しますか？</h2>
+                  <p className="event-delete-copy">「{selectedEvent.title}」を削除すると、HomeとCalendarの両方から表示されなくなります。</p>
+                </header>
+                <div className="event-dialog-actions">
+                  <button type="button" className="button" onClick={() => setEventDialogMode('detail')}>戻る</button>
+                  <button type="button" className="button button-danger" onClick={deleteSelectedEvent}>削除する</button>
+                </div>
+              </div>
+            )}
+          </section>
+        </div>
+      )}
     </section>
   );
 
@@ -695,51 +1001,51 @@ function App() {
                 <small>{weekRangeLabel} ・ 月〜金</small>
               </div>
             </div>
+            <div className="school-week-navigation" aria-label="時間割の週移動">
+              <button type="button" className="calendar-arrow" aria-label="前の週" onClick={() => setSchoolWeekOffset((offset) => offset - 1)}>‹</button>
+              <button type="button" className="button button-small" onClick={() => setSchoolWeekOffset(0)}>今週</button>
+              <button type="button" className="calendar-arrow" aria-label="次の週" onClick={() => setSchoolWeekOffset((offset) => offset + 1)}>›</button>
+            </div>
           </div>
 
           <div className="timetable-scroll" role="region" aria-label="今週の時間割" tabIndex={0}>
           <div className="timetable">
             <div className="timetable-head">時限</div>
-            <div className={`timetable-head ${today.getDay() === 1 ? 'is-today' : ''}`}>月</div>
-            <div className={`timetable-head ${today.getDay() === 2 ? 'is-today' : ''}`}>火</div>
-            <div className={`timetable-head ${today.getDay() === 3 ? 'is-today' : ''}`}>水</div>
-            <div className={`timetable-head ${today.getDay() === 4 ? 'is-today' : ''}`}>木</div>
-            <div className={`timetable-head ${today.getDay() === 5 ? 'is-today' : ''}`}>金</div>
+            {schoolWeekDays.map((day) => (
+              <div key={day.dateKey} className={`timetable-head school-day-header ${day.dateKey === toLocalDateKey(today) ? 'is-today' : ''}`}>
+                <span>{day.dayLabel}</span>
+                <small>{new Intl.DateTimeFormat('ja-JP', { month: 'numeric', day: 'numeric' }).format(day.date)}</small>
+              </div>
+            ))}
 
-            <div className="timetable-cell period">1<br />09:10</div>
-            <div className="timetable-cell"><button type="button" className="class-pill" onClick={() => navigate('subject')}>Webアプリ開発<small>対面 ・ 302教室</small></button></div>
-            <div className="timetable-cell" />
-            <div className="timetable-cell"><button type="button" className="class-pill" onClick={() => navigate('subject')}>データベース<small>オンライン ・ Zoom</small></button></div>
-            <div className="timetable-cell" />
-            <div className="timetable-cell" />
-
-            <div className="timetable-cell period">2<br />10:50</div>
-            <div className="timetable-cell" />
-            <div className="timetable-cell"><button type="button" className="class-pill" onClick={() => navigate('subject')}>グループ開発<small>オンライン ・ Zoom</small></button></div>
-            <div className="timetable-cell" />
-            <div className="timetable-cell"><button type="button" className="class-pill" onClick={() => navigate('subject')}>プログラミング<small>対面</small></button></div>
-            <div className="timetable-cell" />
-
-            <div className="timetable-cell period">3<br />13:10</div>
-            <div className="timetable-cell"><button type="button" className="class-pill" onClick={() => navigate('subject')}>データベース<small>対面</small></button></div>
-            <div className="timetable-cell" />
-            <div className="timetable-cell" />
-            <div className="timetable-cell" />
-            <div className="timetable-cell"><button type="button" className="class-pill" onClick={() => navigate('subject')}>Webアプリ開発<small>対面</small></button></div>
-
-            <div className="timetable-cell period">4限</div>
-            <div className="timetable-cell" />
-            <div className="timetable-cell" />
-            <div className="timetable-cell" />
-            <div className="timetable-cell" />
-            <div className="timetable-cell" />
-
-            <div className="timetable-cell period">5限</div>
-            <div className="timetable-cell" />
-            <div className="timetable-cell" />
-            <div className="timetable-cell" />
-            <div className="timetable-cell" />
-            <div className="timetable-cell" />
+            {schoolPeriods.map((period) => (
+              <Fragment key={period.period}>
+                <div className="timetable-cell period">{period.period}<br />{period.startTime}</div>
+                {schoolWeekDays.map((day) => {
+                  const cellEvents = getSchoolEventsForCell(day.dateKey, period.period);
+                  return (
+                    <div key={`${day.dateKey}-${period.period}`} className="timetable-cell school-time-cell">
+                      {cellEvents.map((event) => (
+                        <button key={event.id} type="button" className="class-pill" onClick={() => openEventInCalendar(event)}>
+                          {event.title}
+                          <small>{event.format} ・ {event.startTime}〜{event.endTime}{event.location ? ` ・ ${event.location}` : ''}</small>
+                        </button>
+                      ))}
+                      {cellEvents.length === 0 && (
+                        <button
+                          type="button"
+                          className="class-pill class-pill-empty"
+                          aria-label={`${day.dayLabel} ${period.period}限に授業を追加`}
+                          onClick={() => openSchoolCell(day.date, period.period)}
+                        >
+                          <span aria-hidden="true">＋</span>
+                        </button>
+                      )}
+                    </div>
+                  );
+                })}
+              </Fragment>
+            ))}
           </div>
           </div>
         </section>
@@ -757,8 +1063,8 @@ function App() {
 
           <div className="info-stack">
             <div className="info-row">
-              <span>今日の授業</span>
-              <strong>09:10 Webアプリ開発</strong>
+              <span>選択週の授業</span>
+              <strong>{schoolWeekEvents.length}件</strong>
             </div>
             <div className="info-row">
               <span>次の課題</span>
