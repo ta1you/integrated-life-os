@@ -1,4 +1,4 @@
-﻿import { Fragment, useEffect, useState, type FormEvent } from 'react';
+import { Fragment, useEffect, useState, type FormEvent } from 'react';
 import {
   Bell,
   BookOpen,
@@ -67,13 +67,7 @@ function createEmptyEventDraft(date: string): EventDraft {
   return { date, startTime: '09:00', endTime: '10:00', title: '', category: '学校', format: '対面', location: '' };
 }
 
-function createSampleEvents(date = toLocalDateKey(new Date())): LifeEvent[] {
-  return [
-    { id: 'sample-web-app-class', date, startTime: '09:10', endTime: '10:40', title: 'Webアプリ開発', category: '学校', format: '対面', location: '302教室' },
-    { id: 'sample-group-project', date, startTime: '13:00', endTime: '14:30', title: 'グループ開発', category: 'プロジェクト', format: 'オンライン', location: 'Zoom' },
-    { id: 'sample-part-time-shift', date, startTime: '18:00', endTime: '22:00', title: 'バイト', category: 'バイト', format: '対面', location: 'マック' },
-  ];
-}
+
 
 function isStoredLifeEvent(value: unknown): value is LifeEvent {
   if (typeof value !== 'object' || value === null) return false;
@@ -95,11 +89,11 @@ function isStoredLifeEvent(value: unknown): value is LifeEvent {
 function readStoredEvents(): LifeEvent[] {
   try {
     const storedEvents = window.localStorage.getItem(eventStorageKey);
-    if (storedEvents === null) return createSampleEvents();
+    if (storedEvents === null) return [];
     const parsedEvents: unknown = JSON.parse(storedEvents);
     return Array.isArray(parsedEvents) ? parsedEvents.filter(isStoredLifeEvent) : [];
   } catch {
-    return createSampleEvents();
+    return [];
   }
 }
 
