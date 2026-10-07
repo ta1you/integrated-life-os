@@ -453,6 +453,21 @@ function App() {
     setEventDialogMode(null);
   };
 
+  const changeSelectedDateByOffset = (offsetDays: number) => {
+    const nextDate = new Date(selectedCalendarDate);
+    nextDate.setDate(nextDate.getDate() + offsetDays);
+    setSelectedCalendarDate(nextDate);
+    setSelectedEventId(null);
+    setEventDialogMode(null);
+
+    if (
+      nextDate.getFullYear() !== visibleCalendarMonth.getFullYear() ||
+      nextDate.getMonth() !== visibleCalendarMonth.getMonth()
+    ) {
+      setVisibleCalendarMonth(new Date(nextDate.getFullYear(), nextDate.getMonth(), 1));
+    }
+  };
+
   const openCreateEvent = () => {
     setEditingEventId(null);
     setEventDraft(createEmptyEventDraft(toLocalDateKey(selectedCalendarDate)));
@@ -1015,7 +1030,7 @@ function App() {
                   type="button"
                   aria-label={`${day}日${hasEvents ? ' 予定あり' : ''}`}
                   aria-pressed={isSelected}
-                  className={`day-cell ${isSelected ? 'selected' : ''} ${hasEvents ? 'has-dot' : ''} ${isToday ? 'is-today' : ''}`}
+                  className={`day-cell ${isSelected ? 'selected' : ''} ${isToday ? 'is-today' : ''}`}
                   onClick={() => {
                     setSelectedCalendarDate(date);
                     setSelectedEventId(null);
@@ -1038,7 +1053,25 @@ function App() {
                 <small>選択した日の予定</small>
               </div>
             </div>
-            <span className="tiny-badge">{selectedDaySchedule.length}件</span>
+            <div className="selected-day-actions">
+              <button
+                type="button"
+                className="calendar-arrow"
+                aria-label="前の日"
+                onClick={() => changeSelectedDateByOffset(-1)}
+              >
+                ‹
+              </button>
+              <button
+                type="button"
+                className="calendar-arrow"
+                aria-label="次の日"
+                onClick={() => changeSelectedDateByOffset(1)}
+              >
+                ›
+              </button>
+              <span className="tiny-badge">{selectedDaySchedule.length}件</span>
+            </div>
           </div>
 
           <div className="agenda-list">
