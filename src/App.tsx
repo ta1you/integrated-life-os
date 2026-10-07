@@ -325,6 +325,10 @@ function App() {
   const [eventFormError, setEventFormError] = useState('');
   const [activeLessonTab, setActiveLessonTab] = useState<LessonSection>('previous');
   const [subjectTaskAdded, setSubjectTaskAdded] = useState(false);
+  const [selectedSubjectItem, setSelectedSubjectItem] = useState<TimetableItem | null>(null);
+  const [subjectSwitchPrompt, setSubjectSwitchPrompt] = useState<TimetableItem | null>(null);
+  const [dismissedSubjectSwitchKey, setDismissedSubjectSwitchKey] = useState<string | null>(null);
+  const [isSubjectPickerOpen, setIsSubjectPickerOpen] = useState(false);
   const [completedTaskIds, setCompletedTaskIds] = useState<string[]>([]);
   const [taskFilter, setTaskFilter] = useState<'all' | 'open' | 'done'>('all');
   const [expenses, setExpenses] = useState<DemoExpense[]>(initialExpenses);
@@ -402,6 +406,18 @@ function App() {
   };
 
   const currentTime = `${String(today.getHours()).padStart(2, '0')}:${String(today.getMinutes()).padStart(2, '0')}`;
+
+  const getCurrentTimetableItem = (date: Date) => {
+    const dayJa = dayJaList[date.getDay()];
+    if (!timetableDays.includes(dayJa as TimetableDay)) return null;
+    const time = `${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`;
+    return timetable.find((item) => item.day === dayJa && item.startTime <= time && time < item.endTime) ?? null;
+  };
+
+  const currentTimetableItem = getCurrentTimetableItem(today);
+  const subjectSwitchKey = currentTimetableItem
+    ? `${toLocalDateKey(today)}-${currentTimetableItem.id}`
+    : null;
   const todaySchedule = getMergedScheduleForDate(today);
   const nextScheduleItem = todaySchedule.find((item) => item.startTime >= currentTime);
   const nextHomeSchedule = nextScheduleItem ? {
@@ -651,6 +667,31 @@ function App() {
   }, []);
 
   useEffect(() => {
+    if (activeView !== 'subject') {
+      if (currentTimetableItem && selectedSubjectItem?.id !== currentTimetableItem.id) {
+        setSelectedSubjectItem(currentTimetableItem);
+      }
+      setSubjectSwitchPrompt(null);
+      setIsSubjectPickerOpen(false);
+      return;
+    }
+
+    if (!selectedSubjectItem && currentTimetableItem) {
+      setSelectedSubjectItem(currentTimetableItem);
+      return;
+    }
+
+    if (currentTimetableItem && selectedSubjectItem && currentTimetableItem.id !== selectedSubjectItem.id) {
+      const switchKey = `${toLocalDateKey(today)}-${currentTimetableItem.id}`;
+      if (dismissedSubjectSwitchKey !== switchKey) {
+        setSubjectSwitchPrompt(currentTimetableItem);
+      }
+    } else {
+      setSubjectSwitchPrompt(null);
+    }
+  }, [activeView, today, timetable, currentTimetableItem?.id, selectedSubjectItem?.id, dismissedSubjectSwitchKey]);
+
+  useEffect(() => {
     try {
       window.localStorage.setItem(eventStorageKey, JSON.stringify(events));
     } catch {
@@ -674,8 +715,31 @@ function App() {
     return () => window.clearTimeout(timer);
   }, [freeNote]);
 
+  const switchSubjectTo = (item: TimetableItem) => {
+    setSelectedSubjectItem(item);
+    setSubjectSwitchPrompt(null);
+    setDismissedSubjectSwitchKey(null);
+    setIsSubjectPickerOpen(false);
+  };
+
+  const acceptSubjectSwitch = () => {
+    if (!subjectSwitchPrompt) return;
+    switchSubjectTo(subjectSwitchPrompt);
+  };
+
+  const postponeSubjectSwitch = () => {
+    if (!subjectSwitchPrompt || !subjectSwitchKey) return;
+    setDismissedSubjectSwitchKey(subjectSwitchKey);
+    setSubjectSwitchPrompt(null);
+  };
+
   const navigate = (view: View) => {
     setIsMobileMoreOpen(false);
+    if (view === 'subject' && currentTimetableItem) {
+      setSelectedSubjectItem(currentTimetableItem);
+      setSubjectSwitchPrompt(null);
+      setDismissedSubjectSwitchKey(null);
+    }
     setActiveView(view);
     window.history.pushState({}, '', `#${view}`);
     window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -1054,23 +1118,9 @@ function App() {
               </div>
             </div>
             <div className="selected-day-actions">
-              <button
-                type="button"
-                className="calendar-arrow"
-                aria-label="前の日"
-                onClick={() => changeSelectedDateByOffset(-1)}
-              >
-                ‹
-              </button>
-              <button
-                type="button"
-                className="calendar-arrow"
-                aria-label="次の日"
-                onClick={() => changeSelectedDateByOffset(1)}
-              >
-                ›
-              </button>
+              <button type="button" className="calendar-arrow" aria-label="前日" onClick={() => changeSelectedDateByOffset(-1)}>‹</button>
               <span className="tiny-badge">{selectedDaySchedule.length}件</span>
+              <button type="button" className="calendar-arrow" aria-label="翌日" onClick={() => changeSelectedDateByOffset(1)}>›</button>
             </div>
           </div>
 
@@ -1511,24 +1561,77 @@ function App() {
     );
   };
 
-  const renderSubject = () => (
+  const renderSubject = () => {
+    const subjectItem = selectedSubjectItem ?? currentTimetableItem;
+    const subjectName = subjectItem?.subject ?? '授業を選択してください';
+    const subjectClassType = subjectItem ? classTypeConfig[subjectItem.classType]?.shortLabel ?? 'その他' : '—';
+    const subjectTime = subjectItem ? `${subjectItem.startTime} - ${subjectItem.endTime}` : '—';
+    const subjectRoom = subjectItem?.classroom || '未設定';
+    const subjectNotes = subjectName === 'Webアプリ開発' ? lessonNotes : null;
+    const subjectTasks = tasks.filter((task) => task.context.includes(subjectName));
+
+    return (
     <section className="page">
-      <div className="page-header">
+      <div className="page-header subject-page-header">
         <div>
           <p className="eyebrow">SUBJECT</p>
-          <h1>Webアプリ開発</h1>
+          <h1>{subjectName}</h1>
+          {subjectItem && <p className="subject-live-status">{currentTimetableItem?.id === subjectItem.id ? '現在の授業' : '表示中の授業'}</p>}
         </div>
-        <div className="button-row">
+        <div className="button-row subject-actions">
+          <button type="button" className="button" onClick={() => setIsSubjectPickerOpen((open) => !open)}>
+            科目を切り替える
+          </button>
           <a className="button button-primary" href="https://zoom.us/" target="_blank" rel="noreferrer">Zoomを開く</a>
           <a className="button" href="https://classroom.google.com/" target="_blank" rel="noreferrer">資料を見る</a>
         </div>
       </div>
 
+      {isSubjectPickerOpen && (
+        <div className="subject-picker panel" role="dialog" aria-label="科目を切り替える">
+          <div className="subject-picker-header">
+            <div>
+              <strong>科目を切り替える</strong>
+              <small>表示する授業を選択できます</small>
+            </div>
+            <button type="button" className="icon-button" onClick={() => setIsSubjectPickerOpen(false)} aria-label="閉じる"><X size={16} /></button>
+          </div>
+          <div className="subject-picker-list">
+            {timetable.length === 0 && <p className="calendar-empty-state">時間割に登録された科目がありません。</p>}
+            {timetable.map((item) => (
+              <button
+                key={item.id}
+                type="button"
+                className={`subject-picker-item ${selectedSubjectItem?.id === item.id ? 'is-selected' : ''}`}
+                onClick={() => switchSubjectTo(item)}
+              >
+                <span><strong>{item.subject}</strong><small>{item.day}曜日 {item.period}限 ・ {item.startTime}〜{item.endTime}</small></span>
+                <span className="class-type-badge">{classTypeConfig[item.classType]?.shortLabel}</span>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {subjectSwitchPrompt && (
+        <div className="subject-switch-prompt" role="status" aria-live="polite">
+          <div className="subject-switch-copy">
+            <strong>次の授業が始まりました</strong>
+            <span>{subjectSwitchPrompt.subject}（{subjectSwitchPrompt.startTime}〜{subjectSwitchPrompt.endTime}）の時間です。</span>
+            <small>表示中の「{subjectName}」から切り替えますか？</small>
+          </div>
+          <div className="subject-switch-actions">
+            <button type="button" className="button button-primary button-small" onClick={acceptSubjectSwitch}>切り替える</button>
+            <button type="button" className="button button-small" onClick={postponeSubjectSwitch}>あとで</button>
+          </div>
+        </div>
+      )}
+
       <div className="subject-meta-grid">
-        <div className="meta-pill"><span>授業形式</span><strong>対面</strong></div>
-        <div className="meta-pill"><span>時間</span><strong>09:10 - 10:40</strong></div>
-        <div className="meta-pill"><span>教室</span><strong>302教室</strong></div>
-        <div className="meta-pill"><span>出席</span><strong>12 / 14</strong></div>
+        <div className="meta-pill"><span>授業形式</span><strong>{subjectClassType}</strong></div>
+        <div className="meta-pill"><span>時間</span><strong>{subjectTime}</strong></div>
+        <div className="meta-pill"><span>教室</span><strong>{subjectRoom}</strong></div>
+        <div className="meta-pill"><span>出席</span><strong>—</strong></div>
       </div>
 
       <div className="tab-row">
@@ -1550,15 +1653,15 @@ function App() {
             <div className="panel-title-wrap">
               <span className="icon-badge icon-blue"><NotebookPen size={16} /></span>
               <div>
-                <h2>{lesson.heading}</h2>
-                <small>{lesson.date}</small>
+                <h2>{subjectNotes ? subjectNotes[activeLessonTab].heading : '授業メモ'}</h2>
+                <small>{subjectNotes ? subjectNotes[activeLessonTab].date : 'まだ記録がありません'}</small>
               </div>
             </div>
           </div>
 
           <div className="note-box">
             <ul className="note-list">
-              {lesson.items.map((item) => (
+              {(subjectNotes ? subjectNotes[activeLessonTab].items : ['この科目の授業メモはまだありません。']).map((item) => (
                 <li key={item}>{item}</li>
               ))}
             </ul>
@@ -1607,12 +1710,12 @@ function App() {
                 </div>
               </div>
             </div>
-            {tasks.filter((task) => task.context.includes('Webアプリ開発')).map((task) => (
+            {subjectTasks.length > 0 ? subjectTasks.map((task) => (
               <div key={task.id} className="relationship-card">
                 <strong>{task.title}</strong>
                 <span>期限 {task.deadline}</span>
               </div>
-            ))}
+            )) : <p className="calendar-empty-state">この科目に関連する課題はまだありません。</p>}
             <button type="button" className="inline-link" onClick={() => navigate('tasks')}>
               Tasks一覧を見る <ChevronRight size={12} />
             </button>
@@ -1628,19 +1731,13 @@ function App() {
                 </div>
               </div>
             </div>
-            <div className="relationship-card">
-              <strong>データベース確認</strong>
-              <span>10/15</span>
-            </div>
-            <div className="relationship-card">
-              <strong>JavaScript基礎</strong>
-              <span>10/20</span>
-            </div>
+            <p className="calendar-empty-state">関連テストはこれから登録できます。</p>
           </section>
         </aside>
       </div>
     </section>
-  );
+    );
+  };
 
   const renderTasks = () => (
     <section className="page">
